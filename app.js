@@ -203,13 +203,26 @@
 
   async function getWeekData(sport, pointer){
     const key = cacheKey(sport, pointer);
-    try{
-      const cached = await storage.get(key, false);
-      if(cached && cached.value) return JSON.parse(cached.value);
-    }catch(e){ /* not cached yet */ }
+
+    // The CFB week-0/week-1 split (below) is derived from ESPN's combined ~10-day block, and that
+    // block keeps filling in with more games as the season approaches — so a split computed early
+    // (when only a few games existed yet) is wrong once the rest show up. It's never re-derived
+    // once persisted, since getWeekData otherwise caches forever with no expiry, so it's kept out of
+    // localStorage entirely (getWeekZeroOneSplit's in-memory cache still avoids refetching within
+    // one page view) and any stale copy from before this fix is purged on the way through.
+    const isCfbWeekZeroOne = sport === 'college-football' && pointer.seasontype === 2 && (pointer.week === 0 || pointer.week === 1);
+
+    if(isCfbWeekZeroOne){
+      try{ await storage.delete(key); }catch(e){}
+    }else{
+      try{
+        const cached = await storage.get(key, false);
+        if(cached && cached.value) return JSON.parse(cached.value);
+      }catch(e){ /* not cached yet */ }
+    }
 
     let parsed;
-    if(sport === 'college-football' && pointer.seasontype === 2 && (pointer.week === 0 || pointer.week === 1)){
+    if(isCfbWeekZeroOne){
       const split = await getWeekZeroOneSplit(sport, pointer.year, pointer.seasontype);
       parsed = {
         meta: { year: pointer.year, week: pointer.week, seasontype: pointer.seasontype, weekText: pointer.week === 0 ? 'Week 0' : 'Week 1' },
@@ -218,9 +231,9 @@
     }else{
       const raw = await fetchJSON(scoreboardURL(sport, pointer));
       parsed = parseScoreboard(raw, pointer);
+      try{ await storage.set(key, JSON.stringify(parsed), false); }catch(e){}
     }
 
-    try{ await storage.set(key, JSON.stringify(parsed), false); }catch(e){}
     return parsed;
   }
 
