@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NFL — Delayed Kickoff</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header>
+  <div class="brand"><span class="dot"></span><h1>Delayed Kickoff</h1><span class="tag">no spoilers board</span></div>
+  <div class="subhead">Scores hidden by design. Ranks &amp; records shown exactly as they stood that week.</div>
+  <div class="controls">
+    <div class="tabs">
+      <a href="cfb.html" class="tab" data-sport="college-football">CFB</a>
+      <a href="nfl.html" class="tab active" data-sport="nfl">NFL</a>
+      <a href="soccer.html" class="tab" data-sport="soccer">⚽ Soccer</a>
+      <a href="watchlist.html" class="tab" data-sport="watchlist">📑 Watchlist</a>
+    </div>
+    <div class="weeknav">
+      <button id="prevWeek">‹</button>
+      <div class="weeklabel" id="weekLabel">—</div>
+      <button id="nextWeek">›</button>
+      <button class="now-badge" id="jumpNow">Jump to now</button>
+    </div>
+    <div class="sort-toggle" id="sortToggle">
+      <button class="sort-btn active" data-sort="time">Kickoff order</button>
+      <button class="sort-btn" data-sort="watchability">Watchability</button>
+    </div>
+    <div class="follow-list" id="followList"></div>
+  </div>
+</header>
+
+<main id="board">
+  <div class="loading"><span class="flicker">LOADING BOARD…</span></div>
+</main>
+
+<footer class="note">
+  <b>Ranks</b> are each team's poll position entering that week. <b>Records</b> reflect completed games only, tallied
+  up through the week before the one you're viewing — for weeks that haven't happened yet, both simply stay blank
+  rather than showing a placeholder. <b>★ stars</b> are a watchability guess built from rankings, broadcast slot,
+  records, and the pre-game point spread when one's posted (tight lines count for, blowout lines count against) —
+  never real viewership data, since no free source for that exists. Once a game is final, a close finish or an
+  upset quietly pulls its score back up even if the line said blowout — the spread and the final margin are used
+  for that math but never shown. <b>🔥 Nail-biter</b> means the score was within 16 at the end of the 3rd
+  quarter and didn't blow open wider than that by the final whistle — not just a close final number, which
+  a heavy favorite can rack up in garbage time despite a game that was never really in doubt. Falls back to
+  the pregame line when quarter-by-quarter data isn't available. An outright upset always counts, regardless
+  of margin. <b>♥</b> follows a
+  team — a strong boost toward their games, but not an automatic 3-star override; other factors still count. <b>📑</b> pins a game to your own <b>Watchlist</b> tab, grouped by week,
+  regardless of its score. <b>☐/☑</b> marks a game as already watched (dims the row) — separate from the
+  watchlist, so pinning and watched-tracking don't interfere with each other. Every team also has its own small
+  <b>👁</b> next to its name — that's the only thing gating its rank, its record, and whether its name highlights
+  as a winner, since a record climbing (or a highlighted name) after you step forward a week gives away who won.
+  It's there for every team, ranked or not, played or not, so the icon itself never hints at anything. <b>★ stars</b>
+  always show, but the badges behind them (Marquee, Close spread, Following, and especially 🔥 Nail-biter, which
+  gives away that a finished game was close) stay hidden until you tap the row-level <b>👁</b> instead — that
+  reveal is per-row and never remembered, so every visit starts hidden again. <b>Kickoff order / Watchability</b>
+  sorts whatever week you're
+  looking at either way.
+  Stepping through weeks moves CFB and NFL together — each resolves the same number of weeks from its own current
+  week, so switching tabs mid-browse lands on the correlated point in both seasons. Everything you mark is saved
+  locally and stays put across visits. Data via ESPN's public scoreboard endpoints.
+</footer>
+
+<script>window.APP_SPORT = 'nfl';</script>
+<script src="app.js"></script>
+</body>
+</html>
