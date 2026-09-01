@@ -109,6 +109,7 @@
   }
   .row .time .status-live{color:var(--hot);font-weight:700;}
   .row .time .status-final{color:var(--dimmer);}
+  .row .time .status-replay{color:var(--gold);}
 
   .matchup{min-width:0;}
   .team-line{display:flex;align-items:center;gap:8px;margin:2px 0;flex-wrap:wrap;}

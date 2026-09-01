@@ -475,6 +475,20 @@
     return d.toLocaleDateString(undefined, { weekday:'short', month:'numeric', day:'numeric' });
   }
 
+  // Week data is cached indefinitely (see getWeekData), so a game's `state`/`completed` fields
+  // reflect whatever the scoreboard looked like at fetch time — they can go stale (e.g. a week
+  // fetched before kickoff stays frozen on "pre" long after the game has ended). `completed` is
+  // trustworthy once true (a finished game never becomes unfinished), but for everything else we
+  // reason from the kickoff clock instead of trusting a possibly-stale live/pre flag.
+  const TYPICAL_DURATION_MS = 4 * 60 * 60 * 1000; // ~4h covers OT; better to undercount as "live" a bit long than call it over early
+
+  function statusPhase(g, nowMs){
+    if(g.completed) return 'final';
+    const kickoff = new Date(g.date).getTime();
+    if(nowMs < kickoff) return 'upcoming';
+    return (nowMs - kickoff) < TYPICAL_DURATION_MS ? 'live' : 'replay';
+  }
+
   // Keyed by "sport:gameId" -> { game, recAway, recHome, pointer, showDate } for whatever is currently
   // on screen, so a favorite/watchlist toggle can patch just that row instead of rebuilding the board.
   state.renderedGames = new Map();
@@ -514,11 +528,11 @@
     const seen = isSeen(sport, g.id);
     const revealed = state.revealedRows.has(`${sport}:${g.id}`);
 
-    const statusLine = g.completed
-      ? `<span class="status-final">FINAL</span>`
-      : g.state === 'in'
-        ? `<span class="status-live">LIVE</span>`
-        : timeStr(g.date);
+    const phase = statusPhase(g, Date.now());
+    const statusLine = phase === 'final' ? `<span class="status-final">FINAL</span>`
+      : phase === 'live' ? `<span class="status-live">LIVE</span>`
+      : phase === 'replay' ? `<span class="status-replay">REPLAY</span>`
+      : timeStr(g.date);
     const dateMini = opts.showDate ? `<div class="date-mini">${shortDate(g.date)}</div>` : '';
 
     const teamLine = (team, side) => {

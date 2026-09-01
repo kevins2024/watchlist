@@ -283,6 +283,20 @@
     return new Date(iso).toLocaleDateString(undefined, { weekday:'short', month:'numeric', day:'numeric' });
   }
 
+  // The whole season is fetched once and cached indefinitely (see fetchSeason), so a match's
+  // `state`/`completed` fields reflect whatever the scoreboard looked like at that one fetch — they
+  // go stale fast (e.g. a season fetched before kickoff stays frozen on "pre" for the rest of the
+  // season). `completed` is trustworthy once true (a finished match never becomes unfinished), but
+  // for everything else we reason from the kickoff clock instead of trusting a possibly-stale flag.
+  const TYPICAL_DURATION_MS = 2.25 * 60 * 60 * 1000; // 90min + stoppage + halftime, with a buffer
+
+  function statusPhase(g, nowMs){
+    if(g.completed) return 'final';
+    const kickoff = new Date(g.date).getTime();
+    if(nowMs < kickoff) return 'upcoming';
+    return (nowMs - kickoff) < TYPICAL_DURATION_MS ? 'live' : 'replay';
+  }
+
   function buildRowHTML(league, g, recAway, recHome, rowIndex, opts={}){
     const followedGame = (g.away && isFollowed(league, g.away.id)) || (g.home && isFollowed(league, g.home.id));
     const stars = starScore(g, recAway, recHome, followedGame);
@@ -291,9 +305,11 @@
     const seen = isSeen(league, g.id);
     const revealed = state.revealedRows.has(`${league}:${g.id}`);
 
-    const statusLine = g.completed
-      ? `<span class="status-final">FINAL</span>`
-      : g.state === 'in' ? `<span class="status-live">LIVE</span>` : timeStr(g.date);
+    const phase = statusPhase(g, Date.now());
+    const statusLine = phase === 'final' ? `<span class="status-final">FINAL</span>`
+      : phase === 'live' ? `<span class="status-live">LIVE</span>`
+      : phase === 'replay' ? `<span class="status-replay">REPLAY</span>`
+      : timeStr(g.date);
     const dateMini = opts.showDate ? `<div class="date-mini">${shortDate(g.date)}</div>` : '';
 
     const teamLine = (team, side) => {
