@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NHL — Delayed Kickoff</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header>
+  <div class="brand"><span class="dot"></span><h1>Delayed Kickoff</h1><span class="tag">no spoilers board</span></div>
+  <div class="subhead">Scores hidden by design. NHL runs a daily slate, not weekly rounds, so this pages by day.</div>
+  <div class="controls">
+    <div class="tabs">
+      <a href="cfb.html" class="tab" data-sport="college-football">CFB</a>
+      <a href="nfl.html" class="tab" data-sport="nfl">NFL</a>
+      <a href="nhl.html" class="tab active" data-sport="nhl">🏒 NHL</a>
+      <a href="soccer.html" class="tab" data-sport="soccer">⚽ Soccer</a>
+      <a href="intl-soccer.html" class="tab" data-sport="intl-soccer">🌍 Int'l Soccer</a>
+      <a href="rugby.html" class="tab" data-sport="rugby">🏉 Rugby</a>
+      <a href="watchlist.html" class="tab" data-sport="watchlist">📑 Watchlist</a>
+    </div>
+    <div class="weeknav">
+      <button id="prevDay">‹</button>
+      <div class="weeklabel" id="dayLabel">—</div>
+      <button id="nextDay">›</button>
+      <button class="now-badge" id="jumpNowDay">Jump to now</button>
+    </div>
+    <div class="sort-toggle" id="sortToggle">
+      <button class="sort-btn active" data-sort="time">Puck-drop order</button>
+      <button class="sort-btn" data-sort="watchability">Watchability</button>
+    </div>
+    <div class="follow-list" id="followList"></div>
+  </div>
+</header>
+
+<main id="board">
+  <div class="loading"><span class="flicker">LOADING BOARD…</span></div>
+</main>
+
+<footer class="note">
+  Pages by <b>day</b> rather than by week — the NHL plays most nights of the season, so there's no
+  natural weekly round the way CFB/NFL have. Stepping ‹ / › moves to the next or previous date that
+  actually has a game, skipping empty days automatically. <b>Records</b> are plain W-L-OTL and points
+  (2 per win, 1 per overtime/shootout loss), computed from each team's own full-season results strictly
+  before the game you're viewing — not from ESPN's own "record" field, which already includes the game
+  it's attached to and would give away the result the moment you looked. Records are hidden behind each
+  team's own <b>👁</b> the same way as the other boards. <b>★ stars</b> use broadcast slot, a small
+  playoff bump, how close the two teams are in the standings so far, and a close final score or a result
+  against the run of form — a one-goal final, or any game that reached overtime or a shootout, counts as
+  close. <b>📑 / ☐☑ / ♥</b> work the same as the other boards, but are kept on their own separate list —
+  not merged into the shared Watchlist page. Schedule and record data are fetched fresh every visit
+  rather than cached, since games in progress or not yet played can't be frozen into local storage
+  without going stale. Data via ESPN's public scoreboard and team-schedule endpoints.
+</footer>
+
+<script src="nhl.js"></script>
+</body>
+</html>

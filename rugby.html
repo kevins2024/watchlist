@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rugby — Delayed Kickoff</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header>
+  <div class="brand"><span class="dot"></span><h1>Delayed Kickoff</h1><span class="tag">no spoilers board</span></div>
+  <div class="subhead">Scores hidden by design. Windows are clustered from the real fixture list, not an official round number.</div>
+  <div class="controls">
+    <div class="tabs">
+      <a href="cfb.html" class="tab" data-sport="college-football">CFB</a>
+      <a href="nfl.html" class="tab" data-sport="nfl">NFL</a>
+      <a href="nhl.html" class="tab" data-sport="nhl">🏒 NHL</a>
+      <a href="soccer.html" class="tab" data-sport="soccer">⚽ Soccer</a>
+      <a href="intl-soccer.html" class="tab" data-sport="intl-soccer">🌍 Int'l Soccer</a>
+      <a href="watchlist.html" class="tab" data-sport="watchlist">📑 Watchlist</a>
+    </div>
+    <div class="tabs rugby-tabs">
+      <button class="tab active" data-comp="180659">Six Nations</button>
+      <button class="tab" data-comp="244293">Rugby Championship</button>
+      <button class="tab" data-comp="17567">Nations Championship</button>
+      <button class="tab" data-comp="289234">Test Matches</button>
+      <button class="tab" data-comp="164205">World Cup</button>
+      <button class="tab" data-comp="268565">British &amp; Irish Lions</button>
+    </div>
+    <div class="weeknav">
+      <button id="prevMD">‹</button>
+      <div class="weeklabel" id="mdLabel">—</div>
+      <button id="nextMD">›</button>
+      <button class="now-badge" id="jumpNowMD">Jump to now</button>
+    </div>
+    <div class="sort-toggle" id="sortToggle">
+      <button class="sort-btn active" data-sort="time">Kickoff order</button>
+      <button class="sort-btn" data-sort="watchability">Watchability</button>
+    </div>
+    <div class="follow-list" id="followList"></div>
+  </div>
+</header>
+
+<main id="board">
+  <div class="loading"><span class="flicker">LOADING BOARD…</span></div>
+</main>
+
+<footer class="note">
+  <b>National-team</b> rugby union only — club competitions (Top 14, URC, Gallagher Prem, Super Rugby,
+  etc.) aren't included here. <b>Test Matches</b> is a catch-all for internationals outside the other five
+  competitions, so it mixes tier-1 nations with much smaller ones — the <b>★ stars</b> are there to help
+  surface the real fixtures. <b>Windows</b> are clustered from the real fixture list the same way club
+  soccer matchdays are — grouped by the natural gap between kickoffs, since these competitions don't run
+  on a fixed weekly schedule. Some tabs will be empty most of the time (the World Cup and the Lions Tour
+  only happen every 4 years) — that's expected, not an error. Schedule data is fetched fresh every visit
+  rather than cached, since these calendars keep filling in over time. <b>Records</b> are plain W-D-L,
+  tallied from completed windows before the one you're viewing within that same competition — not
+  converted to a points table, since bonus-point scoring differs by competition. Records are hidden
+  behind each team's own <b>👁</b> the same way as the other boards. <b>★ stars</b> use broadcast slot,
+  competition prestige, how close the two teams' records are so far, and a close final score (within a
+  converted try, 7 points) or a result against the run of form. <b>📑 / ☐☑ / ♥</b> work the same as the
+  other boards, but are kept on their own separate list — not merged into the shared Watchlist page.
+  Data via ESPN's public scoreboard endpoints.
+</footer>
+
+<script>window.APP_COMP = '180659';</script>
+<script src="rugby.js"></script>
+</body>
+</html>

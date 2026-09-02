@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>International Soccer — Delayed Kickoff</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header>
+  <div class="brand"><span class="dot"></span><h1>Delayed Kickoff</h1><span class="tag">no spoilers board</span></div>
+  <div class="subhead">Scores hidden by design. Windows are clustered from the real fixture list, not an official round number.</div>
+  <div class="controls">
+    <div class="tabs">
+      <a href="cfb.html" class="tab" data-sport="college-football">CFB</a>
+      <a href="nfl.html" class="tab" data-sport="nfl">NFL</a>
+      <a href="nhl.html" class="tab" data-sport="nhl">🏒 NHL</a>
+      <a href="soccer.html" class="tab" data-sport="soccer">⚽ Soccer</a>
+      <a href="rugby.html" class="tab" data-sport="rugby">🏉 Rugby</a>
+      <a href="watchlist.html" class="tab" data-sport="watchlist">📑 Watchlist</a>
+    </div>
+    <div class="tabs intlsoccer-tabs">
+      <button class="tab active" data-comp="fifa.world">World Cup</button>
+      <button class="tab" data-comp="uefa.euro">Euros</button>
+      <button class="tab" data-comp="conmebol.america">Copa América</button>
+      <button class="tab" data-comp="uefa.nations">Nations League</button>
+      <button class="tab" data-comp="uefa.euroq">Euro Qualifying</button>
+      <button class="tab" data-comp="fifa.worldq.uefa">WCQ · Europe</button>
+      <button class="tab" data-comp="fifa.worldq.conmebol">WCQ · CONMEBOL</button>
+      <button class="tab" data-comp="fifa.worldq.concacaf">WCQ · CONCACAF</button>
+      <button class="tab" data-comp="fifa.worldq.caf">WCQ · Africa</button>
+      <button class="tab" data-comp="fifa.worldq.afc">WCQ · Asia</button>
+      <button class="tab" data-comp="fifa.friendly">Friendlies</button>
+    </div>
+    <div class="weeknav">
+      <button id="prevMD">‹</button>
+      <div class="weeklabel" id="mdLabel">—</div>
+      <button id="nextMD">›</button>
+      <button class="now-badge" id="jumpNowMD">Jump to now</button>
+    </div>
+    <div class="sort-toggle" id="sortToggle">
+      <button class="sort-btn active" data-sort="time">Kickoff order</button>
+      <button class="sort-btn" data-sort="watchability">Watchability</button>
+    </div>
+    <div class="follow-list" id="followList"></div>
+  </div>
+</header>
+
+<main id="board">
+  <div class="loading"><span class="flicker">LOADING BOARD…</span></div>
+</main>
+
+<footer class="note">
+  <b>National-team</b> competitions, separate from the club <b>⚽ Soccer</b> board — World Cup, Euros, Copa
+  América, Nations League, qualifying campaigns by confederation, and friendlies. <b>Windows</b> are
+  clustered from the real fixture list the same way club matchdays are — grouped by the natural gap
+  between kickoffs — since these competitions don't run on a fixed weekly schedule. Some tabs will be
+  empty most of the time (a tournament that only happens every 2–4 years has long gaps between windows,
+  and stays empty here until it's actually active) — that's expected, not an error. Schedule data is
+  fetched fresh every visit rather than cached, since these calendars keep filling in over time.
+  <b>Records</b> are W-D-L and points, tallied from completed windows before the one you're viewing
+  within that same competition, hidden behind each team's own <b>👁</b> the same way as the other
+  boards. <b>★ stars</b> use broadcast slot, tournament prestige, how close the two teams are in this
+  competition's own table, and a close final score or a result against the run of form. <b>📑 / ☐☑ / ♥</b>
+  work the same as the other boards, but are kept on their own separate list — not merged into the
+  shared Watchlist page. Data via ESPN's public scoreboard endpoints.
+</footer>
+
+<script>window.APP_COMP = 'fifa.world';</script>
+<script src="intl-soccer.js"></script>
+</body>
+</html>
