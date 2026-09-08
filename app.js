@@ -313,11 +313,6 @@
         rank: (c.curatedRank && typeof c.curatedRank.current === 'number' && c.curatedRank.current < 99) ? c.curatedRank.current : null,
         winner: c.winner === true,
         score: c.score !== undefined ? Number(c.score) : null,
-        // per-quarter scoring (e.g. [7,14,0,21]) — used to tell a genuinely tight finish from
-        // garbage time padding a blowout's final margin. Not always present; null if missing.
-        linescores: Array.isArray(c.linescores) && c.linescores.length
-          ? c.linescores.map(ls => Number(ls.value ?? ls.displayValue ?? ls) || 0)
-          : null
       }) : null;
       const netObj = comp.broadcasts?.[0];
       const network = netObj?.names?.[0] || comp.geoBroadcasts?.[0]?.media?.shortName || null;
@@ -408,69 +403,105 @@
   }
 
   // ---------- watchability heuristic ----------
+  // Exact top-tier broadcast slots only. A *Network*/*SN* channel (ACC Network, CBSSN, ESPNU...) is
+  // exposure, not evidence of a big game, so this is an exact match rather than the substring check
+  // it used to be (which let "ESPNU" count as "ESPN").
   const MAJOR_NETS = ['ABC','CBS','NBC','FOX','ESPN','ESPN2','Prime Video','Peacock'];
 
-  function isNailBiter(game){
-    if(!game.completed || game.away?.score == null || game.home?.score == null) return false;
+  // Was the final result actually in question? Trusts the final margin alone — within 16 is close.
+  // (An earlier version also looked at the score through 3 quarters to catch a blowout that only
+  // looked close at the final whistle because of garbage-time scoring. Dropped it: any cutoff on the
+  // Q3 gap misjudges some real games — a genuine 4th-quarter comeback can produce the exact same
+  // final/Q3 numbers as a coast-and-pad blowout, so there's no threshold that gets both right.)
+  function wasActuallyClose(game){
+    if(game.away?.score == null || game.home?.score == null) return false;
     return Math.abs(game.away.score - game.home.score) <= 16;
   }
 
+  function isNailBiter(game){
+    return !!game.completed && wasActuallyClose(game);
+  }
+
+  // Who was expected to win, and did they lose? Betting odds are almost never present in this feed
+  // for CFB, so fall back to rankings: a ranked team is presumed favorite over an unranked one, and
+  // between two ranked teams the higher rank (lower number) is favored.
   function isUpset(game){
-    if(!game.completed || !game.odds?.favorite) return false;
-    return (game.odds.favorite === 'home' && game.away?.winner === true) ||
-           (game.odds.favorite === 'away' && game.home?.winner === true);
-  }
-
-  // Sum of the first 3 quarters for each side, if ESPN gave us per-quarter scoring.
-  function scoreThroughQ3(team){
-    if(!team?.linescores || team.linescores.length < 3) return null;
-    return team.linescores.slice(0,3).reduce((a,b) => a+b, 0);
-  }
-
-  // A close final margin only means something if the game was actually still in doubt getting there.
-  // Real signal, when we have it: within 16 points at the end of the 3rd quarter, and the final gap
-  // didn't blow open wider than that — i.e. it stayed close or tightened further in the 4th, rather
-  // than a blowout that only looked "close" at the final whistle because backups traded garbage-time
-  // scores once it was already decided. Falls back to the pregame-line guard when quarter data is
-  // missing. An outright upset always counts, regardless of margin.
-  function wasCompetitive(game){
-    if(isUpset(game)) return true;
-
-    const awQ3 = scoreThroughQ3(game.away);
-    const hmQ3 = scoreThroughQ3(game.home);
-    if(awQ3 != null && hmQ3 != null && game.away?.score != null && game.home?.score != null){
-      const q3Diff = Math.abs(awQ3 - hmQ3);
-      const finalDiff = Math.abs(game.away.score - game.home.score);
-      return q3Diff <= 16 && finalDiff <= q3Diff;
+    if(!game.completed) return false;
+    let favorite = game.odds?.favorite ?? null;
+    if(favorite == null){
+      const awayRank = game.away?.rank, homeRank = game.home?.rank;
+      if(awayRank != null && homeRank == null) favorite = 'away';
+      else if(homeRank != null && awayRank == null) favorite = 'home';
+      else if(awayRank != null && homeRank != null) favorite = awayRank < homeRank ? 'away' : 'home';
     }
-
-    const spreadAbs = game.odds?.spreadAbs;
-    const wasBlowoutLine = spreadAbs != null && spreadAbs >= 21;
-    return isNailBiter(game) && !wasBlowoutLine;
+    if(favorite == null) return false;
+    return (favorite === 'home' && game.away?.winner === true) ||
+           (favorite === 'away' && game.home?.winner === true);
   }
 
-  // Rankings + broadcast slot + records + following set the pre-game expectation, the spread nudges
-  // it (tight line up, blowout line down) — and once a game is final, a genuinely competitive finish
-  // (see wasCompetitive above) quietly pulls the score back up. The spread number and the final
-  // margin are never rendered, only used here.
-  function starScore(game, recAway, recHome, followed){
-    let s = 0;
-    if(followed) s += 2; // a strong nudge, not an automatic 3/3 — other factors still matter
-    if(game.network && MAJOR_NETS.some(n => game.network.includes(n))) s++;
-    const ranks = [game.away?.rank, game.home?.rank].filter(r => r != null);
-    if(ranks.length === 2) s += 2; else if(ranks.length === 1) s += 1;
-    if(recAway && recHome && (recAway.w + recAway.l) > 0 && (recHome.w + recHome.l) > 0
-       && recAway.w >= recAway.l && recHome.w >= recHome.l) s++;
+  // A ranked-vs-ranked matchup pre-game is a real marquee signal. A both-ranked game that survives
+  // the result (actually stayed close, not just close-looking, or is still to be played) keeps the
+  // badge; one that turned into a rout loses it — the final score gets the last word on "was this big."
+  function isMarquee(game){
+    if(game.away?.rank == null || game.home?.rank == null) return false;
+    if(!game.completed) return true;
+    return wasActuallyClose(game);
+  }
 
+  // ---- Pre-game / in-progress: an expectation score built from hype signals alone. Thrown away
+  // entirely once a game is final (see postGameScore) — a guess about how good a game will be
+  // doesn't get to keep counting once we know how it actually went.
+  function preGameScore(game, recAway, recHome, followed){
+    let s = 0;
+    if(followed) s += 40;
+    const ranks = [game.away?.rank, game.home?.rank].filter(r => r != null);
+    // Only *both* ranked is a real signal. One ranked team alone says nothing — it's either a good
+    // measuring-stick game or a wipeout, and there's no way to tell which in advance.
+    if(ranks.length === 2) s += 35;
+    if(game.network && MAJOR_NETS.includes(game.network)) s += 10;
+    if(recAway && recHome && (recAway.w + recAway.l) > 0 && (recHome.w + recHome.l) > 0
+       && recAway.w >= recAway.l && recHome.w >= recHome.l) s += 5;
     const spreadAbs = game.odds?.spreadAbs;
     if(spreadAbs != null){
-      if(spreadAbs <= 9) s += 1;
-      else if(spreadAbs >= 21) s -= 1;
+      if(spreadAbs <= 9) s += 20;
+      else if(spreadAbs >= 21) s -= 20;
+    }
+    return Math.max(0, Math.min(100, s));
+  }
+
+  // ---- Final: the result IS the score. A game that finished within 16 points was in jeopardy the
+  // whole way and scores high, scaled by how close it actually got. Anything wider is a blowout and
+  // scores 0 — unless a followed team is the one doing the blowing out, which is still worth
+  // watching, just less so the further it runs away (a 60-point win is boring too).
+  function postGameScore(game, followedAway, followedHome){
+    if(game.away?.score == null || game.home?.score == null) return 0;
+    const followedInIt = followedAway || followedHome;
+    const followedWon = (followedAway && game.away?.winner === true) || (followedHome && game.home?.winner === true);
+
+    if(wasActuallyClose(game)){
+      const diff = Math.abs(game.away.score - game.home.score);
+      let s = 100 - Math.round((diff / 16) * 40); // tied → 100, exactly 16-point final → 60
+      if(followedInIt) s += 10;
+      if(isUpset(game)) s += 10;
+      return Math.max(0, Math.min(100, s));
     }
 
-    if(game.completed && wasCompetitive(game)) s += 2;
+    if(!followedWon) return 0;
+    const diff = Math.abs(game.away.score - game.home.score);
+    return Math.max(0, Math.round(25 - (diff - 16) * 0.8));
+  }
 
-    return Math.max(0, Math.min(s, 3));
+  function watchabilityScore(sport, game, recAway, recHome){
+    const followedAway = !!(game.away && isFollowed(sport, game.away.id));
+    const followedHome = !!(game.home && isFollowed(sport, game.home.id));
+    if(game.completed) return postGameScore(game, followedAway, followedHome);
+    return preGameScore(game, recAway, recHome, followedAway || followedHome);
+  }
+
+  function scoreBucketClass(score){
+    if(score >= 70) return 'high';
+    if(score >= 40) return 'mid';
+    return 'low';
   }
 
   // ---------- rendering ----------
@@ -534,8 +565,9 @@
 
   function buildRowHTML(sport, g, recAway, recHome, rowIndex, pointer, opts={}){
     const followedGame = (g.away && isFollowed(sport, g.away.id)) || (g.home && isFollowed(sport, g.home.id));
-    const stars = starScore(g, recAway, recHome, followedGame);
-    const nail = wasCompetitive(g);
+    const score = watchabilityScore(sport, g, recAway, recHome);
+    const marquee = isMarquee(g);
+    const nail = isNailBiter(g);
     const closeSpread = g.odds?.spreadAbs != null && g.odds.spreadAbs <= 9;
     const watched = isWatched(sport, g.id);
     const seen = isSeen(sport, g.id);
@@ -584,12 +616,12 @@
         <div class="icon-row">
           <button class="seen-btn ${seen?'on':''}" data-sport="${sport}" data-id="${g.id}" title="${seen?'Mark as not watched':'Mark as watched'}">${seen?'☑':'☐'}</button>
           <button class="bookmark-btn ${watched?'on':''}" data-sport="${sport}" data-id="${g.id}" data-year="${pointer?.year??''}" data-seasontype="${pointer?.seasontype??''}" data-week="${pointer?.week??''}" title="${watched?'Remove from watchlist':'Add to watchlist'}">${watched?'🔖':'📑'}</button>
-          ${(followedGame||stars>=2||closeSpread||nail) ? `<button class="reveal-btn ${revealed?'on':''}" data-sport="${sport}" data-id="${g.id}" title="${revealed?'Hide watchability reasons':'Show rating reasons'}">${revealed?'🙈':'👁'}</button>` : ''}
+          ${(followedGame||score>=50||closeSpread||nail) ? `<button class="reveal-btn ${revealed?'on':''}" data-sport="${sport}" data-id="${g.id}" title="${revealed?'Hide watchability reasons':'Show rating reasons'}">${revealed?'🙈':'👁'}</button>` : ''}
         </div>
-        ${stars>0 ? `<span class="stars">${'★'.repeat(stars)}${'☆'.repeat(3-stars)}</span>` : ''}
+        ${score>0 ? `<span class="watch-score ${scoreBucketClass(score)}">${score}</span>` : ''}
         ${revealed ? `
           ${followedGame ? `<span class="badge following">♥ following</span>` : ''}
-          ${stars>=2 && !followedGame ? `<span class="badge marquee">Marquee</span>` : ''}
+          ${marquee && !followedGame ? `<span class="badge marquee">Marquee</span>` : ''}
           ${closeSpread ? `<span class="badge spread">Close spread</span>` : ''}
           ${nail ? `<span class="badge nailbiter">🔥 Nail-biter</span>` : ''}
         ` : ''}
@@ -658,10 +690,9 @@
       const scored = data.games.map(g => {
         const recAway = g.away ? records.get(g.away.id) : null;
         const recHome = g.home ? records.get(g.home.id) : null;
-        const followedGame = (g.away && isFollowed(sport, g.away.id)) || (g.home && isFollowed(sport, g.home.id));
-        return { g, recAway, recHome, stars: starScore(g, recAway, recHome, followedGame) };
+        return { g, recAway, recHome, score: watchabilityScore(sport, g, recAway, recHome) };
       });
-      scored.sort((a,b) => b.stars - a.stars || new Date(a.g.date) - new Date(b.g.date));
+      scored.sort((a,b) => b.score - a.score || new Date(a.g.date) - new Date(b.g.date));
       scored.forEach((item, idx) => {
         state.renderedGames.set(`${sport}:${item.g.id}`, { game:item.g, recAway:item.recAway, recHome:item.recHome, pointer, showDate:true });
         html += buildRowHTML(sport, item.g, item.recAway, item.recHome, idx, pointer, { showDate:true });
@@ -751,10 +782,8 @@
       let items = gr.items.slice();
       if(state.sortMode === 'watchability'){
         items.sort((a,b) => {
-          const followedA = (a.game.away && isFollowed(gr.sport, a.game.away.id)) || (a.game.home && isFollowed(gr.sport, a.game.home.id));
-          const followedB = (b.game.away && isFollowed(gr.sport, b.game.away.id)) || (b.game.home && isFollowed(gr.sport, b.game.home.id));
-          const sa = starScore(a.game, a.recAway, a.recHome, followedA);
-          const sb = starScore(b.game, b.recAway, b.recHome, followedB);
+          const sa = watchabilityScore(gr.sport, a.game, a.recAway, a.recHome);
+          const sb = watchabilityScore(gr.sport, b.game, b.recAway, b.recHome);
           return sb - sa || new Date(a.game.date) - new Date(b.game.date);
         });
       }else{

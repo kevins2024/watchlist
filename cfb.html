@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏈</text></svg>">
 <title>CFB — Delayed Kickoff</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -44,22 +45,24 @@
 <footer class="note">
   <b>Ranks</b> are each team's poll position entering that week. <b>Records</b> reflect completed games only, tallied
   up through the week before the one you're viewing — for weeks that haven't happened yet, both simply stay blank
-  rather than showing a placeholder. <b>★ stars</b> are a watchability guess built from rankings, broadcast slot,
-  records, and the pre-game point spread when one's posted (tight lines count for, blowout lines count against) —
-  never real viewership data, since no free source for that exists. Once a game is final, a close finish or an
-  upset quietly pulls its score back up even if the line said blowout — the spread and the final margin are used
-  for that math but never shown. <b>🔥 Nail-biter</b> means the score was within 16 at the end of the 3rd
-  quarter and didn't blow open wider than that by the final whistle — not just a close final number, which
-  a heavy favorite can rack up in garbage time despite a game that was never really in doubt. Falls back to
-  the pregame line when quarter-by-quarter data isn't available. An outright upset always counts, regardless
-  of margin. <b>♥</b> follows a
-  team — a strong boost toward their games, but not an automatic 3-star override; other factors still count. <b>📑</b> pins a game to your own <b>Watchlist</b> tab, grouped by week,
+  rather than showing a placeholder. The <b>n/100 score</b> is a pre-game watchability guess built from rankings
+  (only counts when <i>both</i> teams are ranked — one alone is as likely to be a wipeout as a good game), broadcast
+  slot, records, and the pre-game point spread when one's posted — never real viewership data, since no free source
+  for that exists. Once a game is final, that guess is thrown out entirely and the score becomes a straight read of
+  the result: a final margin within 16 points scores high, scaled by how close it actually got, plus a bump for a
+  followed team or a confirmed upset. Anything wider scores 0 — unless a followed team is the one who won big, which
+  still counts for something but fades the further the margin runs (a 60-point win is boring too). <b>🔥 Nail-biter</b>
+  just means the final margin was within 16 — trusts the box score as-is, no attempt to guess whether a close-looking
+  finish was padded by garbage time, since there's no clean way to tell a real 4th-quarter comeback from that.
+  An outright upset always counts, regardless of margin. <b>♥</b> follows a
+  team — a strong boost pre-game, and it keeps nudging a close finish either way after; a blowout loss doesn't get
+  anything back, only a blowout win does. <b>📑</b> pins a game to your own <b>Watchlist</b> tab, grouped by week,
   regardless of its score. <b>☐/☑</b> marks a game as already watched (dims the row) — separate from the
   watchlist, so pinning and watched-tracking don't interfere with each other. Every team also has its own small
   <b>👁</b> next to its name — that's the only thing gating its rank, its record, and whether its name highlights
   as a winner, since a record climbing (or a highlighted name) after you step forward a week gives away who won.
-  It's there for every team, ranked or not, played or not, so the icon itself never hints at anything. <b>★ stars</b>
-  always show, but the badges behind them (Marquee, Close spread, Following, and especially 🔥 Nail-biter, which
+  It's there for every team, ranked or not, played or not, so the icon itself never hints at anything. The <b>score</b>
+  always shows, but the badges behind it (Marquee, Close spread, Following, and especially 🔥 Nail-biter, which
   gives away that a finished game was close) stay hidden until you tap the row-level <b>👁</b> instead — that
   reveal is per-row and never remembered, so every visit starts hidden again. <b>Kickoff order / Watchability</b>
   sorts whatever week you're
