@@ -35,6 +35,11 @@
       <button class="sort-btn" data-sort="watchability">Watchability</button>
     </div>
     <div class="follow-list" id="followList"></div>
+    <div class="data-io" id="dataIO">
+      <button id="exportDataBtn" title="Download a backup file of your watchlist, follows, and watched-marks across every board">⬇ Export backup</button>
+      <button id="importDataBtn" title="Restore your watchlist, follows, and watched-marks from a previously exported backup file">⬆ Import backup</button>
+      <input type="file" id="importFileInput" accept="application/json,.json" hidden>
+    </div>
   </div>
 </header>
 
@@ -70,6 +75,11 @@
   Stepping through weeks moves CFB and NFL together — each resolves the same number of weeks from its own current
   week, so switching tabs mid-browse lands on the correlated point in both seasons. Everything you mark is saved
   locally and stays put across visits. Data via ESPN's public scoreboard endpoints.
+  <b>Export backup</b> downloads everything you've marked — watchlist, follows, and watched-marks — across every
+  board on this site (CFB, NFL, NHL, Soccer, Int'l Soccer, Rugby) as one JSON file, since it's all stored only in
+  this browser and would otherwise be gone if you cleared site data or switched devices. <b>Import backup</b>
+  restores from a file made this way, replacing whatever's currently saved on this device — it asks for
+  confirmation first since it can't be undone.
 </footer>
 
 <script>window.APP_SPORT = 'watchlist';</script>

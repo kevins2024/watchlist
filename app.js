@@ -92,6 +92,63 @@
     try{ await storage.set('watchlist:teams', JSON.stringify(state.followedTeamsList), false); }catch(e){}
   }
 
+  // Every localStorage key any board on this site writes to (CFB/NFL share the unprefixed keys via
+  // this file; the other boards are separate JS files but the same origin, each with its own prefix).
+  // Export/Import lives on the Watchlist tab but backs up everything, since it's all one localStorage
+  // and there's no reason to make someone do this once per board.
+  const ALL_STORAGE_KEYS = [
+    'watchlist:games', 'seen:games', 'watchlist:teams',
+    'nhl:watchlist:games', 'nhl:seen:games', 'nhl:follow:teams',
+    'soccer:watchlist:games', 'soccer:seen:games', 'soccer:follow:teams',
+    'intlsoccer:watchlist:games', 'intlsoccer:seen:games', 'intlsoccer:follow:teams',
+    'rugby:watchlist:games', 'rugby:seen:games', 'rugby:follow:teams'
+  ];
+
+  async function exportUserData(){
+    const data = {};
+    for(const key of ALL_STORAGE_KEYS){
+      const entry = await storage.get(key);
+      if(entry && entry.value != null) data[key] = entry.value;
+    }
+    const payload = { app: 'delayed-kickoff', version: 1, exportedAt: new Date().toISOString(), data };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `delayed-kickoff-backup-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function importUserDataFromFile(file){
+    let payload;
+    try{
+      payload = JSON.parse(await file.text());
+    }catch(e){
+      alert("That file isn't valid JSON — doesn't look like a Delayed Kickoff backup.");
+      return;
+    }
+    const data = (payload && typeof payload === 'object' && payload.data && typeof payload.data === 'object') ? payload.data : null;
+    if(!data){
+      alert("That doesn't look like a Delayed Kickoff backup file.");
+      return;
+    }
+    const known = new Set(ALL_STORAGE_KEYS);
+    const entries = Object.entries(data).filter(([key, value]) => known.has(key) && typeof value === 'string');
+    if(!entries.length){
+      alert('No recognizable watchlist data found in that file.');
+      return;
+    }
+    if(!confirm(`This will replace your current watchlist, follows, and watched-marks on this device with the ${entries.length} saved list(s) in that file. Continue?`)) return;
+    for(const [key, value] of entries){
+      await storage.set(key, value, false);
+    }
+    await loadUserData();
+    render();
+  }
+
   function toggleSeen(sport, gameId){
     const key = `${sport}:${gameId}`;
     if(state.seenGames.has(key)) state.seenGames.delete(key);
@@ -930,6 +987,17 @@
     if(state.weeksFromNow === 0) return;
     state.weeksFromNow = 0;
     render();
+  });
+
+  // Only present on watchlist.html — cfb.html/nfl.html don't have these controls.
+  document.getElementById('exportDataBtn')?.addEventListener('click', exportUserData);
+  document.getElementById('importDataBtn')?.addEventListener('click', () => {
+    document.getElementById('importFileInput')?.click();
+  });
+  document.getElementById('importFileInput')?.addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = ''; // reset so importing the same filename again still fires 'change'
+    if(file) importUserDataFromFile(file);
   });
 
   // one delegated listener covers watchlist bookmarks, seen toggles, reveal toggles, follow hearts, and follow-chip removals
