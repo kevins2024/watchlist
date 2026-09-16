@@ -274,7 +274,18 @@
     }else{
       try{
         const cached = await storage.get(key, false);
-        if(cached && cached.value) return JSON.parse(cached.value);
+        if(cached && cached.value){
+          const parsedCached = JSON.parse(cached.value);
+          // A week fetched while a game was still in progress caches that game as `completed:false`
+          // forever otherwise — its watchability score would be stuck on the pre-game guess for good,
+          // never updating to the final-score read, since this cache has no TTL. So: if anything in
+          // here isn't marked done but is well past its typical finish time, treat the whole cached
+          // week as stale and refetch instead of trusting it.
+          const stale = (parsedCached.games || []).some(g =>
+            !g.completed && (Date.now() - new Date(g.date).getTime()) > TYPICAL_DURATION_MS
+          );
+          if(!stale) return parsedCached;
+        }
       }catch(e){ /* not cached yet */ }
     }
 
@@ -370,6 +381,7 @@
         rank: (c.curatedRank && typeof c.curatedRank.current === 'number' && c.curatedRank.current < 99) ? c.curatedRank.current : null,
         winner: c.winner === true,
         score: c.score !== undefined ? Number(c.score) : null,
+        conferenceId: c.team?.conferenceId ?? null,
       }) : null;
       const netObj = comp.broadcasts?.[0];
       const network = netObj?.names?.[0] || comp.geoBroadcasts?.[0]?.media?.shortName || null;
@@ -379,6 +391,8 @@
         completed: !!ev.status?.type?.completed,
         state: ev.status?.type?.state, // pre, in, post
         statusDetail: ev.status?.type?.shortDetail || '',
+        period: ev.status?.period ?? null, // 5+ means overtime (period 5 = 1OT, 6 = 2OT, ...)
+        conferenceGame: !!comp.conferenceCompetition,
         network,
         venue: comp.venue?.fullName || null,
         odds: parseOdds(comp, away?.team?.abbreviation, home?.team?.abbreviation),
@@ -465,6 +479,58 @@
   // it used to be (which let "ESPNU" count as "ESPN").
   const MAJOR_NETS = ['ABC','CBS','NBC','FOX','ESPN','ESPN2','Prime Video','Peacock'];
 
+  // Annual rivalry games where the two teams' records/rankings routinely undersell how competitive
+  // it'll be. ESPN's feed has no generic "this is a rivalry" flag (checked: the `notes` field is only
+  // used for branded neutral-site games like bowl/classic names), so this is a hand-picked,
+  // non-exhaustive list of the biggest ones, keyed by team ID so a mascot/branding change can't
+  // silently break it. Ask to add more any time.
+  const RIVALRY_PAIRS = {
+    'college-football': [
+      ['2294','66',  'Cy-Hawk Trophy: Iowa – Iowa State'],
+      ['194','130',  'The Game: Ohio State – Michigan'],
+      ['130','127',  'Paul Bunyan Trophy: Michigan – Michigan State'],
+      ['333','2',    'Iron Bowl: Alabama – Auburn'],
+      ['251','201',  'Red River Rivalry: Texas – Oklahoma'],
+      ['57','61',    'Florida – Georgia'],
+      ['30','87',    'USC – Notre Dame'],
+      ['30','26',    'USC – UCLA'],
+      ['52','2390',  'Florida State – Miami'],
+      ['228','2579', 'Palmetto Bowl: Clemson – South Carolina'],
+      ['61','59',    "Clean, Old-Fashioned Hate: Georgia – Georgia Tech"],
+      ['25','24',    'The Big Game: Cal – Stanford'],
+      ['135','275',  "Paul Bunyan's Axe: Minnesota – Wisconsin"],
+      ['356','77',   'Land of Lincoln Trophy: Illinois – Northwestern'],
+      ['2509','84',  'Old Oaken Bucket: Purdue – Indiana'],
+      ['344','145',  'Egg Bowl: Mississippi State – Ole Miss'],
+      ['96','97',    "Governor's Cup: Kentucky – Louisville"],
+      ['252','254',  'Holy War: BYU – Utah'],
+      ['245','251',  'Lone Star Showdown: Texas A&M – Texas'],
+      ['277','221',  'Backyard Brawl: West Virginia – Pittsburgh'],
+      ['258','259',  'Commonwealth Cup: Virginia – Virginia Tech'],
+      ['349','2426', "America's Game: Army – Navy"],
+      ['2305','2306','Sunflower Showdown: Kansas – Kansas State'],
+      ['197','201',  'Bedlam: Oklahoma State – Oklahoma'],
+      ['2633','238', 'Tennessee – Vanderbilt']
+    ],
+    'nfl': []
+  };
+  const RIVALRY_SETS = Object.fromEntries(
+    Object.entries(RIVALRY_PAIRS).map(([sport, pairs]) => [sport, new Set(pairs.map(([a,b]) => [a,b].sort().join('|')))])
+  );
+  function isRivalryGame(sport, game){
+    const set = RIVALRY_SETS[sport];
+    if(!set || !game.away?.id || !game.home?.id) return false;
+    return set.has([String(game.away.id), String(game.home.id)].sort().join('|'));
+  }
+
+  // 5+ means overtime (period 5 = 1OT, 6 = 2OT, ...). Overtime means the two teams were tied after a
+  // full regulation game — an automatic strong watchability signal on its own, independent of margin,
+  // rank, rivalry, or anything else: no game with a period this high was ever a laugher.
+  function otPeriods(game){
+    if(!game.completed || game.period == null) return 0;
+    return Math.max(0, game.period - 4);
+  }
+
   // Was the final result actually in question? Trusts the final margin alone — within 16 is close.
   // (An earlier version also looked at the score through 3 quarters to catch a blowout that only
   // looked close at the final whistle because of garbage-time scoring. Dropped it: any cutoff on the
@@ -477,6 +543,20 @@
 
   function isNailBiter(game){
     return !!game.completed && wasActuallyClose(game);
+  }
+
+  // Power-conference membership, for the final-score rank component below. The concept doesn't exist
+  // outside CFB, so every team counts as "power" elsewhere — the penalty this feeds just never fires.
+  // ESPN groups every FBS independent under one nominal conference id, and that id currently holds
+  // exactly two teams — Notre Dame and UConn — only one of which is remotely power-caliber, so
+  // independents need their own explicit allow-list rather than a conference id.
+  const POWER_CONFERENCE_IDS = { 'college-football': new Set(['1','4','5','8']) }; // ACC, Big 12, Big Ten, SEC
+  const POWER_INDEPENDENT_IDS = { 'college-football': new Set(['87']) }; // Notre Dame
+  function isPowerConferenceTeam(sport, team){
+    if(sport !== 'college-football') return true;
+    if(!team) return false;
+    if(POWER_INDEPENDENT_IDS[sport]?.has(String(team.id))) return true;
+    return team.conferenceId != null && POWER_CONFERENCE_IDS[sport]?.has(String(team.conferenceId));
   }
 
   // Who was expected to win, and did they lose? Betting odds are almost never present in this feed
@@ -508,13 +588,27 @@
   // ---- Pre-game / in-progress: an expectation score built from hype signals alone. Thrown away
   // entirely once a game is final (see postGameScore) — a guess about how good a game will be
   // doesn't get to keep counting once we know how it actually went.
-  function preGameScore(game, recAway, recHome, followed){
+  // No single one of these signals should be trusted on its own — a rivalry can still be a 50-3
+  // laugher (see: some Army-Navy games), an unranked team can still play a ranked one dead even, a
+  // conference game can still be a mismatch. None of them gate the score to zero on their own or
+  // guarantee a high one; they're small, independent, additive nudges that are meant to stack —
+  // most real games should earn *some* points from *some* combination of them, not require one
+  // specific rare condition (both ranked) just to be worth watching pre-game.
+  function preGameScore(sport, game, recAway, recHome, followed){
     let s = 0;
     if(followed) s += 40;
     const ranks = [game.away?.rank, game.home?.rank].filter(r => r != null);
-    // Only *both* ranked is a real signal. One ranked team alone says nothing — it's either a good
-    // measuring-stick game or a wipeout, and there's no way to tell which in advance.
+    // Both ranked is the strongest version of this signal. One ranked team is weaker and more
+    // ambiguous — it's just as likely to be a measuring-stick win as a wipeout — but it's still a
+    // real signal (a ranked team is, on average, a better and more competitive team), not nothing.
     if(ranks.length === 2) s += 35;
+    else if(ranks.length === 1) s += 15;
+    // A real annual rivalry plays tighter than records suggest more often than not — worth close to
+    // as much as a tight pre-game spread, independent of and additive with everything else here.
+    if(isRivalryGame(sport, game)) s += 20;
+    // Conference games tend to be more evenly matched than a P4-vs-cupcake non-conference slate game
+    // — a weaker, broader version of the same idea as rivalry, using data ESPN already gives us.
+    if(game.conferenceGame) s += 8;
     if(game.network && MAJOR_NETS.includes(game.network)) s += 10;
     if(recAway && recHome && (recAway.w + recAway.l) > 0 && (recHome.w + recHome.l) > 0
        && recAway.w >= recAway.l && recHome.w >= recHome.l) s += 5;
@@ -526,33 +620,62 @@
     return Math.max(0, Math.min(100, s));
   }
 
-  // ---- Final: the result IS the score. A game that finished within 16 points was in jeopardy the
-  // whole way and scores high, scaled by how close it actually got. Anything wider is a blowout and
-  // scores 0 — unless a followed team is the one doing the blowing out, which is still worth
-  // watching, just less so the further it runs away (a 60-point win is boring too).
-  function postGameScore(game, followedAway, followedHome){
-    if(game.away?.score == null || game.home?.score == null) return 0;
-    const followedInIt = followedAway || followedHome;
-    const followedWon = (followedAway && game.away?.winner === true) || (followedHome && game.home?.winner === true);
-
-    if(wasActuallyClose(game)){
-      const diff = Math.abs(game.away.score - game.home.score);
-      let s = 100 - Math.round((diff / 16) * 40); // tied → 100, exactly 16-point final → 60
-      if(followedInIt) s += 10;
-      if(isUpset(game)) s += 10;
-      return Math.max(0, Math.min(100, s));
-    }
-
-    if(!followedWon) return 0;
+  // ---- Final: the result IS the score, full stop — none of the pre-game guessing above carries
+  // over. Margin of victory does the bulk of the work (tied/OT-caliber = 80, down 2 points per point
+  // of final margin), with everything else as smaller stacking nudges on top: which team you follow
+  // won or lost (flat, not scaled by margin — this is an aggregate feeling, not its own mini-formula),
+  // how well-ranked the two teams were, and whether it was a confirmed upset. A followed team winning
+  // huge still only adds 30 to a margin component that's near zero, so the final number doesn't just
+  // read as "your team won" — there has to be real jeopardy, or real prestige, alongside it to get high.
+  function marginComponent(game){
     const diff = Math.abs(game.away.score - game.home.score);
-    return Math.max(0, Math.round(25 - (diff - 16) * 0.8));
+    return Math.max(0, 80 - 2 * diff); // 0 -> 80, 16 -> 48, 40+ -> 0
+  }
+  function followedComponent(game, followedAway, followedHome){
+    const followedWon = (followedAway && game.away?.winner === true) || (followedHome && game.home?.winner === true);
+    const followedLost = (followedAway && game.home?.winner === true) || (followedHome && game.away?.winner === true);
+    return followedWon ? 30 : followedLost ? -30 : 0;
+  }
+  // Both ranked slides up to +20 with how highly (two top-5 teams get nearly all of it; two teams
+  // barely inside the poll get almost none). One ranked is a flat, smaller +10 — deliberately not
+  // scaled, so margin stays the dominant signal rather than rank quality doing extra work here too.
+  // Separately, if neither team plays in a power conference (or is Notre Dame, the one power-caliber
+  // independent), that's a real markdown regardless of rank — a mid-major track meet isn't the same
+  // as a Power 4 defensive struggle even at the same final margin.
+  function rankComponent(sport, game){
+    const awayRank = game.away?.rank, homeRank = game.home?.rank;
+    const ranks = [awayRank, homeRank].filter(r => r != null);
+    let s = 0;
+    if(ranks.length === 2){
+      const strength = r => (26 - r) / 25; // rank 1 -> 1.0, rank 25 -> 0.04
+      s += Math.round(((strength(awayRank) + strength(homeRank)) / 2) * 20);
+    }else if(ranks.length === 1){
+      s += 10;
+    }
+    if(!isPowerConferenceTeam(sport, game.away) && !isPowerConferenceTeam(sport, game.home)) s -= 20;
+    return s;
+  }
+  function postGameScore(sport, game, followedAway, followedHome){
+    if(game.away?.score == null || game.home?.score == null) return 0;
+    let s = marginComponent(game) + followedComponent(game, followedAway, followedHome) + rankComponent(sport, game);
+    if(isUpset(game)) s += 10;
+    return Math.max(0, Math.min(100, s));
   }
 
   function watchabilityScore(sport, game, recAway, recHome){
     const followedAway = !!(game.away && isFollowed(sport, game.away.id));
     const followedHome = !!(game.home && isFollowed(sport, game.home.id));
-    if(game.completed) return postGameScore(game, followedAway, followedHome);
-    return preGameScore(game, recAway, recHome, followedAway || followedHome);
+    if(game.completed){
+      const score = postGameScore(sport, game, followedAway, followedHome);
+      const ot = otPeriods(game);
+      // Floor, not a replacement — a followed team's OT win still scores its own way above this.
+      return ot > 0 ? Math.max(score, Math.min(100, 80 + (ot - 1) * 10)) : score;
+    }
+    // Live (kicked off, not yet final): no rating at all. The pre-game guess is stale the moment the
+    // ball's in the air, and we're not computing a live-score-based one either — the guess should
+    // stop, not just switch to guessing off different, still-incomplete information.
+    if(game.state === 'in') return null;
+    return preGameScore(sport, game, recAway, recHome, followedAway || followedHome);
   }
 
   function scoreBucketClass(score){
@@ -624,7 +747,9 @@
     const followedGame = (g.away && isFollowed(sport, g.away.id)) || (g.home && isFollowed(sport, g.home.id));
     const score = watchabilityScore(sport, g, recAway, recHome);
     const marquee = isMarquee(g);
+    const rivalry = isRivalryGame(sport, g);
     const nail = isNailBiter(g);
+    const ot = otPeriods(g);
     const closeSpread = g.odds?.spreadAbs != null && g.odds.spreadAbs <= 9;
     const watched = isWatched(sport, g.id);
     const seen = isSeen(sport, g.id);
@@ -673,12 +798,14 @@
         <div class="icon-row">
           <button class="seen-btn ${seen?'on':''}" data-sport="${sport}" data-id="${g.id}" title="${seen?'Mark as not watched':'Mark as watched'}">${seen?'☑':'☐'}</button>
           <button class="bookmark-btn ${watched?'on':''}" data-sport="${sport}" data-id="${g.id}" data-year="${pointer?.year??''}" data-seasontype="${pointer?.seasontype??''}" data-week="${pointer?.week??''}" title="${watched?'Remove from watchlist':'Add to watchlist'}">${watched?'🔖':'📑'}</button>
-          ${(followedGame||score>=50||closeSpread||nail) ? `<button class="reveal-btn ${revealed?'on':''}" data-sport="${sport}" data-id="${g.id}" title="${revealed?'Hide watchability reasons':'Show rating reasons'}">${revealed?'🙈':'👁'}</button>` : ''}
+          ${(followedGame||score>=50||closeSpread||nail||rivalry||ot>0) ? `<button class="reveal-btn ${revealed?'on':''}" data-sport="${sport}" data-id="${g.id}" title="${revealed?'Hide watchability reasons':'Show rating reasons'}">${revealed?'🙈':'👁'}</button>` : ''}
         </div>
         ${score>0 ? `<span class="watch-score ${scoreBucketClass(score)}">${score}</span>` : ''}
         ${revealed ? `
           ${followedGame ? `<span class="badge following">♥ following</span>` : ''}
           ${marquee && !followedGame ? `<span class="badge marquee">Marquee</span>` : ''}
+          ${rivalry ? `<span class="badge rivalry">⚔️ Rivalry</span>` : ''}
+          ${ot>0 ? `<span class="badge overtime">⏱ ${ot>1?ot+'OT':'OT'}</span>` : ''}
           ${closeSpread ? `<span class="badge spread">Close spread</span>` : ''}
           ${nail ? `<span class="badge nailbiter">🔥 Nail-biter</span>` : ''}
         ` : ''}
@@ -749,7 +876,7 @@
         const recHome = g.home ? records.get(g.home.id) : null;
         return { g, recAway, recHome, score: watchabilityScore(sport, g, recAway, recHome) };
       });
-      scored.sort((a,b) => b.score - a.score || new Date(a.g.date) - new Date(b.g.date));
+      scored.sort((a,b) => (b.score ?? -1) - (a.score ?? -1) || new Date(a.g.date) - new Date(b.g.date));
       scored.forEach((item, idx) => {
         state.renderedGames.set(`${sport}:${item.g.id}`, { game:item.g, recAway:item.recAway, recHome:item.recHome, pointer, showDate:true });
         html += buildRowHTML(sport, item.g, item.recAway, item.recHome, idx, pointer, { showDate:true });
@@ -839,8 +966,8 @@
       let items = gr.items.slice();
       if(state.sortMode === 'watchability'){
         items.sort((a,b) => {
-          const sa = watchabilityScore(gr.sport, a.game, a.recAway, a.recHome);
-          const sb = watchabilityScore(gr.sport, b.game, b.recAway, b.recHome);
+          const sa = watchabilityScore(gr.sport, a.game, a.recAway, a.recHome) ?? -1;
+          const sb = watchabilityScore(gr.sport, b.game, b.recAway, b.recHome) ?? -1;
           return sb - sa || new Date(a.game.date) - new Date(b.game.date);
         });
       }else{

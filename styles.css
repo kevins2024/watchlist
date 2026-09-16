@@ -12,6 +12,7 @@
     --gold:#FFD166;
     --hot:#FF5E5B;
     --good:#3ECF8E;
+    --rivalry:#B18AFF;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;}
@@ -143,6 +144,8 @@
   .badge.nailbiter{background:rgba(255,94,91,.12);color:var(--hot);border:1px solid rgba(255,94,91,.35);}
   .badge.spread{background:rgba(79,163,209,.12);color:var(--nfl);border:1px solid rgba(79,163,209,.35);}
   .badge.following{background:rgba(255,94,91,.14);color:var(--hot);border:1px solid rgba(255,94,91,.4);}
+  .badge.rivalry{background:rgba(177,138,255,.12);color:var(--rivalry);border:1px solid rgba(177,138,255,.35);}
+  .badge.overtime{background:rgba(62,207,142,.12);color:var(--good);border:1px solid rgba(62,207,142,.35);}
   .watch-score{
     font-family:'Space Mono',monospace;font-size:12px;font-weight:700;line-height:1;
     padding:3px 6px;border-radius:5px;border:1px solid var(--line);background:var(--panel2);
