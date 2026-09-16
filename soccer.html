@@ -29,6 +29,7 @@
       <button class="tab" data-league="fra.1">Ligue 1</button>
       <button class="tab" data-league="ger.1">Bundesliga</button>
       <button class="tab" data-league="ita.1">Serie A</button>
+      <button class="tab" data-league="uefa.champions">Champions League</button>
     </div>
     <div class="weeknav">
       <button id="prevMD">‹</button>
@@ -51,14 +52,19 @@
 <footer class="note">
   <b>Matchday</b> grouping is derived from the actual fixture list, not a confirmed ESPN "round" field —
   games are clustered by the natural gap between kickoffs, so it can occasionally split a rearranged
-  midweek game oddly, but should track each league's real rounds closely. <b>Records</b> are W-D-L and
-  points, tallied from completed matchdays before the one you're viewing, hidden behind each team's own
+  midweek game oddly, but should track each league's real rounds closely. For <b>Champions League</b> this
+  tracks the league phase's rounds cleanly; once knockout ties start, a "matchday" is just whichever games
+  clustered together, not a table round. <b>Records</b> are W-D-L and
+  points, tallied from completed matchdays before the one you're viewing (this competition's own record,
+  not a team's domestic-league form), hidden behind each team's own
   <b>👁</b> the same way as the CFB/NFL boards — for the same reason: a rising points total between visits
   gives away who won. <b>★ stars</b> here use broadcast slot, how close the two teams are in points, and a
   close final score or a result against the run of form — there's no betting-line data behind this one yet
   (ESPN's soccer odds format isn't confirmed), so it's a lighter formula than CFB/NFL's. <b>📑 / ☐☑ / ♥</b>
   work the same as the other boards, but are kept on their own separate list for now — not yet merged into
-  the shared Watchlist page. Data via ESPN's public scoreboard endpoints, cached locally per league/season.
+  the shared Watchlist page. Data via ESPN's public scoreboard endpoints — fetched one date at a time (their
+  API doesn't accept a date range) and cached locally per league/season, so the first time you open a league
+  each season takes a few seconds longer while it pulls the whole schedule; every visit after that is instant.
 </footer>
 
 <script>window.APP_LEAGUE = 'eng.1';</script>

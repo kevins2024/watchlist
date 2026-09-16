@@ -17,7 +17,8 @@
     'esp.1': { label: 'La Liga',        accent: 'esp1' },
     'fra.1': { label: 'Ligue 1',        accent: 'fra1' },
     'ger.1': { label: 'Bundesliga',     accent: 'ger1' },
-    'ita.1': { label: 'Serie A',        accent: 'ita1' }
+    'ita.1': { label: 'Serie A',        accent: 'ita1' },
+    'uefa.champions': { label: 'Champions League', accent: 'ucl' }
   };
 
   const state = {
@@ -119,10 +120,50 @@
     return groups;
   }
 
+  // ESPN's soccer scoreboard used to accept a "dates=YYYYMMDD-YYYYMMDD" range in one request (that's
+  // what this used to do) — it no longer does; even a same-day "range" now 400s, confirmed live. Only
+  // a single `dates=YYYYMMDD` is accepted, so a season has to be built from many single-date requests.
+  // One probe request's response envelope names every real matchday for the season, at least for a
+  // normal league — see fetchSeason below for the one competition type (list-phase tournaments like
+  // Champions League) where that list isn't available and dates have to be estimated instead.
+  async function probeCalendar(league){
+    const raw = await fetchJSON(`https://site.api.espn.com/apis/site/v2/sports/soccer/${league}/scoreboard?dates=${fmtYYYYMMDD(new Date())}`);
+    const lg = raw?.leagues?.[0] || {};
+    return { type: lg.calendarType || null, calendar: lg.calendar || null };
+  }
+
+  function toYYYYMMDD(iso){ return iso.slice(0,10).replace(/-/g, ''); }
+
+  function enumerateDaysUTC(startISO, endISO, weekdaysUTC){
+    const out = [];
+    let d = new Date(startISO); d.setUTCHours(0,0,0,0);
+    const end = new Date(endISO);
+    while(d <= end){
+      if(!weekdaysUTC || weekdaysUTC.includes(d.getUTCDay())) out.push(toYYYYMMDD(d.toISOString()));
+      d = new Date(d.getTime() + 24*60*60*1000);
+    }
+    return out;
+  }
+
+  // Runs `fn` over `items` with at most `limit` in flight at once — a plain Promise.all across a
+  // whole season's worth of single-date requests would fire dozens-to-hundreds at once.
+  async function mapWithConcurrency(items, limit, fn){
+    const results = new Array(items.length);
+    let next = 0;
+    async function worker(){
+      while(next < items.length){
+        const i = next++;
+        results[i] = await fn(items[i]);
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+    return results;
+  }
+
   async function fetchSeason(league){
     if(state.seasons[league]) return state.seasons[league];
-    const { seasonYear, start, end } = seasonWindow();
-    const cacheKey = `soccer:v1:${league}:${seasonYear}`;
+    const { seasonYear } = seasonWindow();
+    const cacheKey = `soccer:v2:${league}:${seasonYear}`;
     try{
       const cached = await storage.get(cacheKey);
       if(cached && cached.value){
@@ -132,9 +173,30 @@
       }
     }catch(e){}
 
-    const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${league}/scoreboard?dates=${fmtYYYYMMDD(start)}-${fmtYYYYMMDD(end)}&limit=1000`;
-    const raw = await fetchJSON(url);
-    const games = (raw.events || []).map(parseSoccerEvent);
+    const { type, calendar } = await probeCalendar(league);
+    let dates;
+    if(type === 'day' && Array.isArray(calendar)){
+      // The normal case: ESPN names every real matchday directly, so fetch exactly those.
+      dates = calendar.map(toYYYYMMDD);
+    }else{
+      // "list"-type calendars (multi-stage tournaments — league phase, knockout rounds, final, ...)
+      // only give stage date *ranges*, not individual matchdays. Champions League-style competitions
+      // play almost exclusively Tue/Wed/Thu, with the final on a Saturday — narrow to those weekdays
+      // rather than probing every single day of a ~10-month span, to keep the request count sane.
+      // A rescheduled match on some other day would just be missed, not break anything else.
+      const block = calendar?.[0];
+      const start = block?.entries?.[0]?.startDate || block?.startDate;
+      const end = block?.entries?.[block.entries.length - 1]?.endDate || block?.endDate;
+      dates = (start && end) ? enumerateDaysUTC(start, end, [2, 3, 4, 6]) : [];
+    }
+
+    const perDate = await mapWithConcurrency(dates, 8, async d => {
+      try{
+        const raw = await fetchJSON(`https://site.api.espn.com/apis/site/v2/sports/soccer/${league}/scoreboard?dates=${d}`);
+        return (raw.events || []).map(parseSoccerEvent);
+      }catch(e){ return []; } // one bad date shouldn't sink the whole season fetch
+    });
+    const games = perDate.flat();
     const matchdays = clusterMatchdays(games);
     const result = { seasonYear, matchdays };
     try{ await storage.set(cacheKey, JSON.stringify(result)); }catch(e){}

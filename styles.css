@@ -255,19 +255,21 @@
   .sport-card .desc{color:var(--dim);font-size:12.5px;margin-top:4px;max-width:360px;}
   .sport-card .arrow{font-family:'Space Mono',monospace;font-size:22px;color:var(--dimmer);}
 
-  /* ---------- soccer board (5-league tabs) ---------- */
+  /* ---------- soccer board (5 domestic leagues + Champions League tabs) ---------- */
   :root{
     --eng1:#C084FC;
     --esp1:#FB7185;
     --fra1:#38BDF8;
     --ger1:#FACC15;
     --ita1:#34D399;
+    --ucl:#6366F1;
   }
   .tab[data-league="eng.1"].active{background:var(--eng1);}
   .tab[data-league="esp.1"].active{background:var(--esp1);}
   .tab[data-league="fra.1"].active{background:var(--fra1);}
   .tab[data-league="ger.1"].active{background:var(--ger1);}
   .tab[data-league="ita.1"].active{background:var(--ita1);}
+  .tab[data-league="uefa.champions"].active{background:var(--ucl);}
   .tabs.soccer-tabs{flex-wrap:wrap;justify-content:center;max-width:520px;}
 
   .sport-card[data-accent="eng1"]:hover{border-color:var(--eng1);}
