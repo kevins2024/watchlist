@@ -238,6 +238,9 @@
     return Math.abs(g.away.score - g.home.score) <= 1 || g.period >= 4;
   }
   function wentToOT(g){ return g.completed && g.period >= 4; }
+  // Regulation is 3 periods; anything past that is overtime/shootout. Playoffs can run to multiple OT
+  // periods (period 5, 6, 7...); a regular-season shootout just shows as one extra period.
+  function otPeriods(g){ return g.completed ? Math.max(0, (g.period || 0) - 3) : 0; }
   function isUpset(g, recAway, recHome){
     if(!g.completed || !recAway || !recHome) return false;
     const ptsA = recAway.w*2 + recAway.otl, ptsH = recHome.w*2 + recHome.otl;
@@ -245,21 +248,62 @@
     if(ptsA > ptsH + 15 && g.home?.winner) return true;
     return false;
   }
+  function standingsClose(recAway, recHome){
+    if(!recAway || !recHome) return false;
+    const ptsA = recAway.w*2+recAway.otl, ptsH = recHome.w*2+recHome.otl;
+    return Math.abs(ptsA-ptsH) <= 8;
+  }
+  // A playoff game that survives the result (stayed a one-goal/OT game, or hasn't been played yet)
+  // keeps the marquee badge; one that turned into a laugher loses it, same as CFB's both-ranked badge.
+  function isMarquee(g){
+    if(g.seasonType !== 3) return false;
+    if(!g.completed) return true;
+    return isCloseFinish(g);
+  }
 
-  // No odds data used (ESPN's NHL odds shape isn't confirmed, same caveat as the soccer/rugby boards),
-  // so this stays a light formula: broadcast slot, a playoff bump, how close the two teams are in the
-  // standings so far, and a retroactive bump for a tight final score or a result against the run of form.
-  function starScore(g, recAway, recHome, followed){
-    if(followed) return 3;
+  // ---- Pre-game / in-progress: a hype guess from small stacking signals, discarded entirely once
+  // the game is final (see postGameScore) — nothing here should still be influencing the score once
+  // we know how it actually went.
+  function preGameScore(g, recAway, recHome, followed){
     let s = 0;
-    if(g.seasonType === 3) s++; // playoffs
-    if(g.network && MAJOR_NETS.some(n => g.network.includes(n))) s++;
-    if(recAway && recHome){
-      const ptsA = recAway.w*2+recAway.otl, ptsH = recHome.w*2+recHome.otl;
-      if(Math.abs(ptsA-ptsH) <= 8) s++;
+    if(followed) s += 40;
+    if(g.seasonType === 3) s += 25; // playoffs are appointment viewing even blind to the matchup
+    if(g.network && MAJOR_NETS.includes(g.network)) s += 10;
+    if(standingsClose(recAway, recHome)) s += 15;
+    return Math.max(0, Math.min(100, s));
+  }
+
+  // ---- Final: the result IS the score. Goal differential does almost all the work (a one-goal or
+  // OT/SO finish scores highest, dropping fast from there — hockey blowouts happen at much smaller
+  // margins than football's), plus a flat followed-team swing and a smaller nudge for a genuine upset
+  // or an evenly-matched standings battle. Any overtime floors the score at 80+, climbing with each
+  // extra period, regardless of what the raw components add up to.
+  function postGameScore(g, recAway, recHome, followed, followedWon){
+    if(g.away?.score == null || g.home?.score == null) return 0;
+    const diff = Math.abs(g.away.score - g.home.score);
+    let s = Math.max(0, 80 - 16 * diff); // 0 -> 80, 1 -> 64, 2 -> 48, 3 -> 32, 4 -> 16, 5+ -> 0
+    if(followed) s += followedWon ? 30 : -30;
+    if(standingsClose(recAway, recHome)) s += 10;
+    if(isUpset(g, recAway, recHome)) s += 10;
+    s = Math.max(0, Math.min(100, s));
+    const ot = otPeriods(g);
+    if(ot > 0) s = Math.max(s, Math.min(100, 80 + (ot - 1) * 10));
+    return s;
+  }
+
+  function watchabilityScore(g, recAway, recHome, followedAway, followedHome){
+    const followed = followedAway || followedHome;
+    if(g.completed){
+      const followedWon = (followedAway && g.away?.winner === true) || (followedHome && g.home?.winner === true);
+      return postGameScore(g, recAway, recHome, followed, followedWon);
     }
-    if(g.completed && (isCloseFinish(g) || isUpset(g, recAway, recHome))) s += 2;
-    return Math.max(0, Math.min(s, 3));
+    if(g.state === 'in') return null; // live: no rating, same reasoning as the CFB board
+    return preGameScore(g, recAway, recHome, followed);
+  }
+  function scoreBucketClass(score){
+    if(score >= 70) return 'high';
+    if(score >= 40) return 'mid';
+    return 'low';
   }
 
   function escapeHTML(s){
@@ -288,8 +332,11 @@
   }
 
   function buildRowHTML(g, recAway, recHome, rowIndex){
-    const followedGame = (g.away && isFollowed(g.away.id)) || (g.home && isFollowed(g.home.id));
-    const stars = starScore(g, recAway, recHome, followedGame);
+    const followedAway = !!(g.away && isFollowed(g.away.id));
+    const followedHome = !!(g.home && isFollowed(g.home.id));
+    const followedGame = followedAway || followedHome;
+    const score = watchabilityScore(g, recAway, recHome, followedAway, followedHome);
+    const marquee = isMarquee(g);
     const close = isCloseFinish(g);
     const ot = wentToOT(g);
     const watched = isWatched(g.id);
@@ -335,11 +382,11 @@
           <button class="seen-btn ${seen?'on':''}" data-id="${g.id}" title="${seen?'Mark as not watched':'Mark as watched'}">${seen?'☑':'☐'}</button>
           <button class="bookmark-btn ${watched?'on':''}" data-id="${g.id}" title="${watched?'Remove from watchlist':'Add to watchlist'}">${watched?'🔖':'📑'}</button>
         </div>
-        ${(followedGame||stars>=2||close) ? `<button class="reveal-btn ${revealed?'on':''}" data-id="${g.id}" title="${revealed?'Hide watchability reasons':'Show rating reasons'}">${revealed?'🙈':'👁'}</button>` : ''}
-        ${stars>0 ? `<span class="stars">${'★'.repeat(stars)}${'☆'.repeat(3-stars)}</span>` : ''}
+        ${(followedGame||(score!=null && score>=50)||close) ? `<button class="reveal-btn ${revealed?'on':''}" data-id="${g.id}" title="${revealed?'Hide watchability reasons':'Show rating reasons'}">${revealed?'🙈':'👁'}</button>` : ''}
+        ${score>0 ? `<span class="watch-score ${scoreBucketClass(score)}">${score}</span>` : ''}
         ${revealed ? `
           ${followedGame ? `<span class="badge following">♥ following</span>` : ''}
-          ${stars>=2 && !followedGame ? `<span class="badge marquee">Marquee</span>` : ''}
+          ${marquee && !followedGame ? `<span class="badge marquee">Marquee</span>` : ''}
           ${ot ? `<span class="badge nailbiter">🔥 Went to OT/SO</span>` : (close ? `<span class="badge nailbiter">🔥 One-goal game</span>` : '')}
         ` : ''}
       </div>
@@ -421,10 +468,11 @@
       const scored = ordered.map(g => {
         const recAway = g.away ? records.get(g.away.id) : null;
         const recHome = g.home ? records.get(g.home.id) : null;
-        const followedGame = (g.away && isFollowed(g.away.id)) || (g.home && isFollowed(g.home.id));
-        return { g, recAway, recHome, stars: starScore(g, recAway, recHome, followedGame) };
+        const followedAway = !!(g.away && isFollowed(g.away.id));
+        const followedHome = !!(g.home && isFollowed(g.home.id));
+        return { g, recAway, recHome, score: watchabilityScore(g, recAway, recHome, followedAway, followedHome) ?? -1 };
       });
-      scored.sort((a,b) => b.stars - a.stars || new Date(a.g.date) - new Date(b.g.date));
+      scored.sort((a,b) => b.score - a.score || new Date(a.g.date) - new Date(b.g.date));
       ordered = scored.map(x => x.g);
     }else{
       ordered.sort((a,b) => new Date(a.date) - new Date(b.date));

@@ -49,10 +49,14 @@
   (2 per win, 1 per overtime/shootout loss), computed from each team's own full-season results strictly
   before the game you're viewing — not from ESPN's own "record" field, which already includes the game
   it's attached to and would give away the result the moment you looked. Records are hidden behind each
-  team's own <b>👁</b> the same way as the other boards. <b>★ stars</b> use broadcast slot, a small
-  playoff bump, how close the two teams are in the standings so far, and a close final score or a result
-  against the run of form — a one-goal final, or any game that reached overtime or a shootout, counts as
-  close. <b>📑 / ☐☑ / ♥</b> work the same as the other boards, but are kept on their own separate list —
+  team's own <b>👁</b> the same way as the other boards. Before puck drop, the <b>n/100 score</b> is a hype
+  guess: broadcast slot, a playoff bump, and how close the two teams are in the standings so far — thrown
+  out entirely once the game is live (no rating shows at all while it's in progress) or final. The final
+  score is a separate calculation built mostly off goal differential (a one-goal or OT/shootout finish
+  scores highest, dropping fast from there — hockey blowouts happen at much smaller margins than football's),
+  plus a flat +/-30 for a followed team winning or losing, and smaller nudges for an even standings battle
+  or a confirmed upset. <b>Any overtime or shootout floors the score at 80+</b>, climbing higher the more
+  extra periods it took (mostly a playoff thing). <b>📑 / ☐☑ / ♥</b> work the same as the other boards, but are kept on their own separate list —
   not merged into the shared Watchlist page. Schedule and record data are fetched fresh every visit
   rather than cached, since games in progress or not yet played can't be frozen into local storage
   without going stale. Data via ESPN's public scoreboard and team-schedule endpoints.

@@ -52,7 +52,7 @@
 <footer class="note">
   <b>National-team</b> rugby union only — club competitions (Top 14, URC, Gallagher Prem, Super Rugby,
   etc.) aren't included here. <b>Test Matches</b> is a catch-all for internationals outside the other five
-  competitions, so it mixes tier-1 nations with much smaller ones — the <b>★ stars</b> are there to help
+  competitions, so it mixes tier-1 nations with much smaller ones — the <b>n/100 score</b> is there to help
   surface the real fixtures. <b>Windows</b> are clustered from the real fixture list the same way club
   soccer matchdays are — grouped by the natural gap between kickoffs, since these competitions don't run
   on a fixed weekly schedule. Some tabs will be empty most of the time (the World Cup and the Lions Tour
@@ -60,9 +60,13 @@
   rather than cached, since these calendars keep filling in over time. <b>Records</b> are plain W-D-L,
   tallied from completed windows before the one you're viewing within that same competition — not
   converted to a points table, since bonus-point scoring differs by competition. Records are hidden
-  behind each team's own <b>👁</b> the same way as the other boards. <b>★ stars</b> use broadcast slot,
-  competition prestige, how close the two teams' records are so far, and a close final score (within a
-  converted try, 7 points) or a result against the run of form. <b>📑 / ☐☑ / ♥</b> work the same as the
+  behind each team's own <b>👁</b> the same way as the other boards. Before kickoff, the <b>n/100 score</b>
+  is a hype guess: competition prestige, broadcast slot, and how close the two teams' records are so far —
+  thrown out entirely once the match is live (no rating shows at all while it's in progress) or final. The
+  final score is a separate calculation built mostly off point differential (rugby's margins run more like
+  football's than soccer's — a converted try is 7), plus a flat +/-30 for a followed team winning or losing
+  (a draw is neutral, not a loss), and smaller nudges for an even head-to-head record or a confirmed upset.
+  <b>📑 / ☐☑ / ♥</b> work the same as the
   other boards, but are kept on their own separate list — not merged into the shared Watchlist page.
   Data via ESPN's public scoreboard endpoints.
 </footer>

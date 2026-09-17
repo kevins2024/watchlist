@@ -254,20 +254,68 @@
     return false;
   }
 
-  // No standings/odds data reliably available across every one of these competitions, so this stays
-  // a light formula: broadcast slot, tournament prestige, how close the two teams are in this
-  // competition's own table so far, and a retroactive bump for a tight final score or an upset.
-  function starScore(comp, g, recAway, recHome, followed){
-    if(followed) return 3;
+  function standingsClose(recAway, recHome){
+    if(!recAway || !recHome) return false;
+    const ptsA = recAway.w*3+recAway.d, ptsH = recHome.w*3+recHome.d;
+    return Math.abs(ptsA-ptsH) <= 6;
+  }
+  // 'won' / 'lost' / 'drew', or null if neither side is followed. A draw is neither a win nor a loss.
+  function followedResult(g, followedAway, followedHome){
+    if(!followedAway && !followedHome) return null;
+    const mine = followedAway ? g.away : g.home;
+    const opp = followedAway ? g.home : g.away;
+    if(mine?.winner === true) return 'won';
+    if(opp?.winner === true) return 'lost';
+    return 'drew';
+  }
+  // Tournament prestige is this board's version of CFB's "both ranked" — survives if the game hasn't
+  // been played yet or actually finished close; a lopsided scoreline loses the badge even at a World Cup.
+  function isMarquee(comp, g){
+    if(!PRESTIGE.has(comp)) return false;
+    if(!g.completed) return true;
+    return isCloseFinish(g);
+  }
+
+  // ---- Pre-game / in-progress: a hype guess from small stacking signals, discarded entirely once
+  // the game is final (see postGameScore) — nothing here should still be influencing the score once
+  // we know how it actually went. No standings/odds data reliably available across every one of these
+  // competitions (qualifiers and friendlies especially), so this stays a light formula.
+  function preGameScore(comp, g, recAway, recHome, followed){
     let s = 0;
-    if(PRESTIGE.has(comp)) s++;
-    if(g.network && MAJOR_NETS.some(n => g.network.includes(n))) s++;
-    if(recAway && recHome){
-      const ptsA = recAway.w*3+recAway.d, ptsH = recHome.w*3+recHome.d;
-      if(Math.abs(ptsA-ptsH) <= 6) s++;
+    if(followed) s += 40;
+    if(PRESTIGE.has(comp)) s += 20; // World Cup / Euros / Copa América: appointment viewing on its own
+    if(g.network && MAJOR_NETS.includes(g.network)) s += 10;
+    if(standingsClose(recAway, recHome)) s += 15;
+    return Math.max(0, Math.min(100, s));
+  }
+
+  // ---- Final: the result IS the score. Goal differential does almost all the work (a draw scores
+  // highest, dropping fast from there), plus a flat +/-30 for a followed team winning or losing (a
+  // draw is neutral, not a loss), and smaller nudges for an even group-table battle or a confirmed
+  // upset.
+  function postGameScore(g, recAway, recHome, followedResultStr){
+    if(g.away?.score == null || g.home?.score == null) return 0;
+    const diff = Math.abs(g.away.score - g.home.score);
+    let s = Math.max(0, 80 - 20 * diff); // 0 (draw) -> 80, 1 -> 60, 2 -> 40, 3 -> 20, 4+ -> 0
+    if(followedResultStr === 'won') s += 30;
+    else if(followedResultStr === 'lost') s -= 30;
+    if(standingsClose(recAway, recHome)) s += 10;
+    if(isUpset(g, recAway, recHome)) s += 10;
+    return Math.max(0, Math.min(100, s));
+  }
+
+  function watchabilityScore(comp, g, recAway, recHome, followedAway, followedHome){
+    const followed = followedAway || followedHome;
+    if(g.completed){
+      return postGameScore(g, recAway, recHome, followedResult(g, followedAway, followedHome));
     }
-    if(g.completed && (isCloseFinish(g) || isUpset(g, recAway, recHome))) s += 2;
-    return Math.max(0, Math.min(s, 3));
+    if(g.state === 'in') return null; // live: no rating, same reasoning as the CFB board
+    return preGameScore(comp, g, recAway, recHome, followed);
+  }
+  function scoreBucketClass(score){
+    if(score >= 70) return 'high';
+    if(score >= 40) return 'mid';
+    return 'low';
   }
 
   function escapeHTML(s){
@@ -297,8 +345,11 @@
   }
 
   function buildRowHTML(comp, g, recAway, recHome, rowIndex, opts={}){
-    const followedGame = (g.away && isFollowed(comp, g.away.id)) || (g.home && isFollowed(comp, g.home.id));
-    const stars = starScore(comp, g, recAway, recHome, followedGame);
+    const followedAway = !!(g.away && isFollowed(comp, g.away.id));
+    const followedHome = !!(g.home && isFollowed(comp, g.home.id));
+    const followedGame = followedAway || followedHome;
+    const score = watchabilityScore(comp, g, recAway, recHome, followedAway, followedHome);
+    const marquee = isMarquee(comp, g);
     const close = isCloseFinish(g);
     const watched = isWatched(comp, g.id);
     const seen = isSeen(comp, g.id);
@@ -344,11 +395,11 @@
           <button class="seen-btn ${seen?'on':''}" data-comp="${comp}" data-id="${g.id}" title="${seen?'Mark as not watched':'Mark as watched'}">${seen?'☑':'☐'}</button>
           <button class="bookmark-btn ${watched?'on':''}" data-comp="${comp}" data-id="${g.id}" title="${watched?'Remove from watchlist':'Add to watchlist'}">${watched?'🔖':'📑'}</button>
         </div>
-        ${(followedGame||stars>=2||close) ? `<button class="reveal-btn ${revealed?'on':''}" data-comp="${comp}" data-id="${g.id}" title="${revealed?'Hide watchability reasons':'Show rating reasons'}">${revealed?'🙈':'👁'}</button>` : ''}
-        ${stars>0 ? `<span class="stars">${'★'.repeat(stars)}${'☆'.repeat(3-stars)}</span>` : ''}
+        ${(followedGame||(score!=null && score>=50)||close) ? `<button class="reveal-btn ${revealed?'on':''}" data-comp="${comp}" data-id="${g.id}" title="${revealed?'Hide watchability reasons':'Show rating reasons'}">${revealed?'🙈':'👁'}</button>` : ''}
+        ${score>0 ? `<span class="watch-score ${scoreBucketClass(score)}">${score}</span>` : ''}
         ${revealed ? `
           ${followedGame ? `<span class="badge following">♥ following</span>` : ''}
-          ${stars>=2 && !followedGame ? `<span class="badge marquee">Marquee</span>` : ''}
+          ${marquee && !followedGame ? `<span class="badge marquee">Marquee</span>` : ''}
           ${close ? `<span class="badge nailbiter">🔥 Tight finish</span>` : ''}
         ` : ''}
       </div>
@@ -413,10 +464,11 @@
       const scored = games.map(g => {
         const recAway = g.away ? records.get(g.away.id) : null;
         const recHome = g.home ? records.get(g.home.id) : null;
-        const followedGame = (g.away && isFollowed(comp, g.away.id)) || (g.home && isFollowed(comp, g.home.id));
-        return { g, recAway, recHome, stars: starScore(comp, g, recAway, recHome, followedGame) };
+        const followedAway = !!(g.away && isFollowed(comp, g.away.id));
+        const followedHome = !!(g.home && isFollowed(comp, g.home.id));
+        return { g, recAway, recHome, score: watchabilityScore(comp, g, recAway, recHome, followedAway, followedHome) ?? -1 };
       });
-      scored.sort((a,b) => b.stars - a.stars || new Date(a.g.date) - new Date(b.g.date));
+      scored.sort((a,b) => b.score - a.score || new Date(a.g.date) - new Date(b.g.date));
       scored.forEach((item, i) => {
         state.renderedGames.set(`${comp}:${item.g.id}`, { game:item.g, recAway:item.recAway, recHome:item.recHome, showDate:true });
         html += buildRowHTML(comp, item.g, item.recAway, item.recHome, i, { showDate:true });
