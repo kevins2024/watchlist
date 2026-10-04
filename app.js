@@ -42,7 +42,7 @@
     // shared across both leagues: "3" means 3 weeks ahead of each league's own current week,
     // so switching tabs mid-browse lands on the correlated point in each season, not an independent one
     weeksFromNow: 0,
-    sortMode: 'time', // 'time' | 'watchability'
+    sortMode: 'watchability', // 'time' | 'watchability'
     pointer: { 'college-football': null, 'nfl': null }, // last-resolved display pointer, for reference
     now: { 'college-football': null, 'nfl': null },      // each league's own true current week
     watchlist: [],       // [{sport, id, year, seasontype, week}] — pinned "want to watch" games
@@ -196,6 +196,7 @@
   const prevBtn = document.getElementById('prevWeek');
   const nextBtn = document.getElementById('nextWeek');
   const jumpNowBtn = document.getElementById('jumpNow');
+  const refreshBtn = document.getElementById('refreshData');
   const weeknavEl = document.querySelector('.weeknav');
 
   // ---------- fetch helpers ----------
@@ -305,6 +306,21 @@
     return parsed;
   }
 
+  // Manual override for the one case the staleness check in getWeekData doesn't catch: pre-game
+  // metadata (rankings, odds, network) that's changed since the first time this week was fetched,
+  // on a game that's nowhere near its kickoff clock yet, so nothing here looks "stuck." Wipes the
+  // cached copy of whatever's currently on screen and re-fetches it from ESPN.
+  async function refreshCurrentView(){
+    if(state.sport === 'watchlist'){
+      const keys = new Set(state.watchlist.map(x => cacheKey(x.sport, x)));
+      for(const k of keys){ try{ await storage.delete(k, false); }catch(e){} }
+    }else{
+      const pointer = state.pointer[state.sport];
+      if(pointer){ try{ await storage.delete(cacheKey(state.sport, pointer), false); }catch(e){} }
+    }
+    await render();
+  }
+
   // Extract a spread magnitude + which side is favored from ESPN's odds block.
   // We only ever use the magnitude to score watchability — the raw line isn't shown for anything
   // that would double as a spoiler, but the pre-game spread itself is public knowledge, not a spoiler.
@@ -392,7 +408,6 @@
         state: ev.status?.type?.state, // pre, in, post
         statusDetail: ev.status?.type?.shortDetail || '',
         period: ev.status?.period ?? null, // 5+ means overtime (period 5 = 1OT, 6 = 2OT, ...)
-        conferenceGame: !!comp.conferenceCompetition,
         network,
         venue: comp.venue?.fullName || null,
         odds: parseOdds(comp, away?.team?.abbreviation, home?.team?.abbreviation),
@@ -606,9 +621,11 @@
     // A real annual rivalry plays tighter than records suggest more often than not — worth close to
     // as much as a tight pre-game spread, independent of and additive with everything else here.
     if(isRivalryGame(sport, game)) s += 20;
-    // Conference games tend to be more evenly matched than a P4-vs-cupcake non-conference slate game
-    // — a weaker, broader version of the same idea as rivalry, using data ESPN already gives us.
-    if(game.conferenceGame) s += 8;
+    // Two power-conference teams (or Notre Dame) is a real baseline-quality signal, independent of
+    // whether either is actually ranked this week — the same power/non-power split used post-game.
+    // isPowerConferenceTeam treats every team as "power" outside CFB (the concept doesn't exist for
+    // NFL), so this is gated to CFB explicitly rather than silently adding +15 to every NFL game.
+    if(sport === 'college-football' && isPowerConferenceTeam(sport, game.away) && isPowerConferenceTeam(sport, game.home)) s += 15;
     if(game.network && MAJOR_NETS.includes(game.network)) s += 10;
     if(recAway && recHome && (recAway.w + recAway.l) > 0 && (recHome.w + recHome.l) > 0
        && recAway.w >= recAway.l && recHome.w >= recHome.l) s += 5;
@@ -624,9 +641,10 @@
   // over. Margin of victory does the bulk of the work (tied/OT-caliber = 80, down 2 points per point
   // of final margin), with everything else as smaller stacking nudges on top: which team you follow
   // won or lost (flat, not scaled by margin — this is an aggregate feeling, not its own mini-formula),
-  // how well-ranked the two teams were, and whether it was a confirmed upset. A followed team winning
-  // huge still only adds 30 to a margin component that's near zero, so the final number doesn't just
-  // read as "your team won" — there has to be real jeopardy, or real prestige, alongside it to get high.
+  // how well-ranked the two teams were, whether it was a confirmed upset, and how high-scoring the game
+  // was overall (a 17-14 slog is less fun than a 27-24 shootout at the same margin). A followed team
+  // winning huge still only adds 30 to a margin component that's near zero, so the final number doesn't
+  // just read as "your team won" — there has to be real jeopardy, or real prestige, alongside it to get high.
   function marginComponent(game){
     const diff = Math.abs(game.away.score - game.home.score);
     return Math.max(0, 80 - 2 * diff); // 0 -> 80, 16 -> 48, 40+ -> 0
@@ -655,9 +673,19 @@
     if(!isPowerConferenceTeam(sport, game.away) && !isPowerConferenceTeam(sport, game.home)) s -= 20;
     return s;
   }
+  // A close game with a low combined score (a defensive slog) is less fun than an equally close one
+  // with a high combined score (a shootout) — small nudge, centered on 35 combined points: +-0 right
+  // at 35, +-1 per 5-point band away from there in either direction (30-34 -> -1, 36-40 -> +1, ...).
+  function totalPointsComponent(game){
+    const total = game.away.score + game.home.score;
+    const diff = total - 35;
+    if(diff === 0) return 0;
+    return Math.ceil(Math.abs(diff) / 5) * Math.sign(diff);
+  }
   function postGameScore(sport, game, followedAway, followedHome){
     if(game.away?.score == null || game.home?.score == null) return 0;
-    let s = marginComponent(game) + followedComponent(game, followedAway, followedHome) + rankComponent(sport, game);
+    let s = marginComponent(game) + followedComponent(game, followedAway, followedHome) + rankComponent(sport, game)
+      + totalPointsComponent(game);
     if(isUpset(game)) s += 10;
     return Math.max(0, Math.min(100, s));
   }
@@ -1114,6 +1142,12 @@
     if(state.weeksFromNow === 0) return;
     state.weeksFromNow = 0;
     render();
+  });
+  refreshBtn.addEventListener('click', async () => {
+    if(refreshBtn.disabled) return;
+    refreshBtn.disabled = true;
+    try{ await refreshCurrentView(); }
+    finally{ refreshBtn.disabled = false; }
   });
 
   // Only present on watchlist.html — cfb.html/nfl.html don't have these controls.

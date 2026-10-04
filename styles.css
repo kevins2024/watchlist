@@ -72,7 +72,8 @@
     border:1px solid var(--good);border-radius:20px;padding:3px 10px;cursor:pointer;background:transparent;
     text-transform:uppercase;
   }
-  .now-badge:hover{background:rgba(62,207,142,.1);}
+  .now-badge:hover:not(:disabled){background:rgba(62,207,142,.1);}
+  .now-badge:disabled{opacity:.4;cursor:default;}
 
   .data-io{display:flex;gap:8px;justify-content:center;}
   .data-io button{

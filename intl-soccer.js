@@ -33,7 +33,7 @@
   const state = {
     comp: window.APP_COMP || 'fifa.world',
     windowOffset: 0,          // Test-window index offset from "current", independent per competition
-    sortMode: 'time',
+    sortMode: 'watchability',
     watchedKeys: new Set(),      // "comp:gameId"
     seenGames: new Set(),
     followedTeams: new Set(),    // "comp:teamId"

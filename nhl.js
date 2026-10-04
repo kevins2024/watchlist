@@ -14,7 +14,7 @@
 
   const state = {
     dateOffset: 0,           // days (in the season calendar, not the raw calendar) from "today"
-    sortMode: 'time',
+    sortMode: 'watchability',
     watchedKeys: new Set(),      // "gameId"
     seenGames: new Set(),
     followedTeams: new Set(),    // "teamId"

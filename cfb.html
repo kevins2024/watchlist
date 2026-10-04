@@ -31,9 +31,10 @@
       <button class="now-badge" id="jumpNow">Jump to now</button>
     </div>
     <div class="sort-toggle" id="sortToggle">
-      <button class="sort-btn active" data-sort="time">Kickoff order</button>
-      <button class="sort-btn" data-sort="watchability">Watchability</button>
+      <button class="sort-btn" data-sort="time">Kickoff order</button>
+      <button class="sort-btn active" data-sort="watchability">Watchability</button>
     </div>
+    <button class="now-badge" id="refreshData" title="Re-fetch this week's data from ESPN — clears the cached copy">⟳ Refresh</button>
     <div class="follow-list" id="followList"></div>
   </div>
 </header>
@@ -49,19 +50,21 @@
   small signals that stack rather than one big gate: both teams ranked (strongest), one team ranked (weaker but
   still real — not nothing, just more ambiguous than two), a hand-picked list of annual rivalry games (⚔️ — plays
   tighter than records suggest more often than not, though not always: a rivalry can still be a blowout, ask to add
-  one we're missing), a conference game (same idea, weaker), broadcast slot, records, and the pre-game point spread
-  when one's posted — never real viewership data, since no free source for that exists. None of these guarantees a
-  good game or a bad one on its own; they just add up. <b>Once a game kicks off, that guess is dropped entirely — a
-  live game shows no rating at all</b> rather than a stale pre-game guess or a live-score guess built on a still
-  half-finished result; the rating comes back the moment it's final. The <b>final score is a completely separate
-  calculation</b>, built almost entirely off the actual result: final margin does the bulk of the work (a tied or
-  OT-caliber finish scores 80, down 2 points per point of margin, floored at 0 by a 40-point margin), plus flat
-  nudges on top rather than more sub-formulas — a followed team winning adds 30, losing subtracts 30, full stop,
-  not scaled by margin; both teams ranked adds up to 20 depending how highly, one team ranked adds a flat 10; and
-  if <i>neither</i> team plays in a power conference (Power 4, plus Notre Dame as the one power-caliber
-  independent — the only other current FBS independent, UConn, doesn't qualify) that's a flat −20 regardless of
-  rank. A confirmed upset adds another 10. None of it stacks to 100 just because your team won — margin still has
-  to bring real jeopardy, or the two teams' pedigree has to bring real prestige, alongside it. <b>Any overtime
+  one we're missing), both teams playing in a power conference (Power 4, plus Notre Dame as the one power-caliber
+  independent — the only other current FBS independent, UConn, doesn't qualify), broadcast slot, records, and the
+  pre-game point spread when one's posted — never real viewership data, since no free source for that exists. None
+  of these guarantees a good game or a bad one on its own; they just add up. <b>Once a game kicks off, that guess is
+  dropped entirely — a live game shows no rating at all</b> rather than a stale pre-game guess or a live-score guess
+  built on a still half-finished result; the rating comes back the moment it's final. The <b>final score is a
+  completely separate calculation</b>, built almost entirely off the actual result: final margin does the bulk of
+  the work (a tied or OT-caliber finish scores 80, down 2 points per point of margin, floored at 0 by a 40-point
+  margin), plus flat nudges on top rather than more sub-formulas — a followed team winning adds 30, losing subtracts
+  30, full stop, not scaled by margin; both teams ranked adds up to 20 depending how highly, one team ranked adds a
+  flat 10; if <i>neither</i> team plays in a power conference that's a flat −20 regardless of rank; and a low- or
+  high-scoring game nudges the score down or up a point for every 5 combined points away from 35 (a 17-14 slog
+  scores a bit lower than a 27-24 game at the same margin, a 45-42 shootout a bit higher). A confirmed upset adds
+  another 10. None of it stacks to 100 just because your team won — margin still has to bring real jeopardy, or the
+  two teams' pedigree has to bring real prestige, alongside it. <b>Any overtime
   scores at least 80 on its own</b>, climbing 10 points per extra OT period up to 100 — a game tied after a full
   regulation is never a laugher, whatever else about it. <b>🔥 Nail-biter</b>
   just means the final margin was within 16 — trusts the box score as-is, no attempt to guess whether a close-looking
@@ -77,7 +80,9 @@
   gives away that a finished game was close) stay hidden until you tap the row-level <b>👁</b> instead — that
   reveal is per-row and never remembered, so every visit starts hidden again. <b>Kickoff order / Watchability</b>
   sorts whatever week you're
-  looking at either way.
+  looking at either way — <b>Watchability</b> is the default. <b>⟳ Refresh</b> clears the cached copy of whatever
+  week is on screen and re-fetches it from ESPN — useful if rankings, odds, or a network assignment were posted
+  after you last looked. Most staleness fixes itself automatically; this is for the rest.
   Stepping through weeks moves CFB and NFL together — each resolves the same number of weeks from its own current
   week, so switching tabs mid-browse lands on the correlated point in both seasons. Everything you mark is saved
   locally and stays put across visits. Data via ESPN's public scoreboard endpoints.

@@ -24,7 +24,7 @@
   const state = {
     league: window.APP_LEAGUE || 'eng.1',
     mdOffset: 0,           // matchdays from "current", independent per league (no cross-league correlation)
-    sortMode: 'time',
+    sortMode: 'watchability',
     watchedKeys: new Set(),      // "league:gameId" — kept separate from the CFB/NFL watchlist for now
     seenGames: new Set(),        // "league:gameId"
     followedTeams: new Set(),    // "league:teamId"
