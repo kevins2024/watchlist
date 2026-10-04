@@ -312,6 +312,16 @@
   // on a game that's nowhere near its kickoff clock yet, so nothing here looks "stuck." Wipes the
   // cached copy of whatever's currently on screen and re-fetches it from ESPN.
   async function refreshCurrentView(){
+    // Also clear any already-cached box-score modifier for whatever's currently on screen — covers
+    // an entry written by a since-fixed bug (caching a false "no penalties/turnovers" before ESPN had
+    // posted the real box score), which would otherwise stay wrong forever since that cache has no
+    // separate staleness check of its own.
+    for(const [k] of state.renderedGames){
+      const [sport, gameId] = k.split(':');
+      state.sloppinessMods.delete(`${sport}:${gameId}`);
+      try{ await storage.delete(`boxstats:v1:${sport}:${gameId}`, false); }catch(e){}
+    }
+
     if(state.sport === 'watchlist'){
       const keys = new Set(state.watchlist.map(x => cacheKey(x.sport, x)));
       for(const k of keys){ try{ await storage.delete(k, false); }catch(e){} }
@@ -745,12 +755,12 @@
       if(cached && cached.value) return JSON.parse(cached.value).mod;
     }catch(e){ /* not cached yet */ }
 
-    let mod = 0;
+    let mod = 0, found = 0;
     try{
       const path = SPORTS[sport].path;
       const raw = await fetchJSON(`https://site.api.espn.com/apis/site/v2/sports/football/${path}/summary?event=${game.id}`);
       const teams = raw?.boxscore?.teams || [];
-      let turnovers = 0, penaltyYards = 0, found = 0;
+      let turnovers = 0, penaltyYards = 0;
       teams.forEach(t => {
         const stats = t.statistics || [];
         const tv = parseInt(stats.find(s => s.name === 'turnovers')?.displayValue, 10);
@@ -769,9 +779,15 @@
         else if(penaltyYards >= 100) penMod = -3;
         mod = Math.max(-15, tvMod + penMod);
       }
-    }catch(e){ mod = 0; } // can't reach the summary endpoint — just skip the modifier, don't fail the row
+    }catch(e){ found = 0; } // can't reach the summary endpoint — just skip the modifier, don't fail the row
 
-    try{ await storage.set(key, JSON.stringify({ mod }), false); }catch(e){}
+    // Only cache a real result. ESPN sometimes posts the final score before the box-score stats are
+    // filled in — if we'd cached a found:0 "0 mod" from a check that happened in that window, it would
+    // stay wrong forever (no staleness check on this key, unlike the week-data cache). Leaving it
+    // uncached means it just retries next time instead of freezing on a result from before the stats existed.
+    if(found){
+      try{ await storage.set(key, JSON.stringify({ mod }), false); }catch(e){}
+    }
     return mod;
   }
 
