@@ -49,7 +49,8 @@
     watchedKeys: new Set(),   // "sport:gameId", derived from watchlist, for fast lookups
     seenGames: new Set(),     // "sport:gameId" — games marked as already watched (separate from the watchlist)
     followedTeams: new Set(),  // "sport:teamId"
-    followedTeamsList: []      // [{sport,id,name}] — kept alongside the Set so we can render chips
+    followedTeamsList: [],     // [{sport,id,name}] — kept alongside the Set so we can render chips
+    sloppinessMods: new Map()  // "sport:gameId" -> penalty/turnover modifier, filled in just before render
   };
 
   function isWatched(sport, gameId){ return state.watchedKeys.has(`${sport}:${gameId}`); }
@@ -706,6 +707,87 @@
     return preGameScore(sport, game, recAway, recHome, followedAway || followedHome);
   }
 
+  // The base score plus the sloppiness modifier (penalties/turnovers, see below) — this is the number
+  // actually shown and sorted on. watchabilityScore stays the "clean" pre-modifier version, since
+  // that's what decides which games are even worth fetching box-score stats for in the first place.
+  function adjustedScore(sport, game, recAway, recHome){
+    const base = watchabilityScore(sport, game, recAway, recHome);
+    if(base == null) return base; // live: no rating, nothing to adjust
+    const mod = state.sloppinessMods.get(`${sport}:${game.id}`) || 0;
+    return Math.max(0, Math.min(100, base + mod));
+  }
+
+  // Runs `fn` over `items` with at most `limit` in flight at once — same pattern as the Champions
+  // League season fetch, for the same reason (a lot of small requests fired at once risks the host
+  // throttling or just being slow to come back in any sensible order).
+  async function mapWithConcurrency(items, limit, fn){
+    let next = 0;
+    async function worker(){
+      while(next < items.length){
+        const i = next++;
+        await fn(items[i]);
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  }
+
+  // Penalties and turnovers aren't in the scoreboard feed at all (confirmed: every competitor's
+  // `statistics` array there is always empty) — they only exist in ESPN's per-game summary endpoint,
+  // one request per game rather than one for the whole week. To keep that cost sane, this only ever
+  // gets called for games that already score 70+ on the base formula (see loadSloppinessMods) — a
+  // blowout doesn't need this fetch, since penalties/turnovers can't move it anywhere interesting.
+  // Combined across both teams: up to 2 turnovers is normal and ignored; it climbs from there. Penalty
+  // yardage follows the same shape. The two are summed and capped at -15 total either way.
+  async function sloppinessModifier(sport, game){
+    const key = `boxstats:v1:${sport}:${game.id}`;
+    try{
+      const cached = await storage.get(key, false);
+      if(cached && cached.value) return JSON.parse(cached.value).mod;
+    }catch(e){ /* not cached yet */ }
+
+    let mod = 0;
+    try{
+      const path = SPORTS[sport].path;
+      const raw = await fetchJSON(`https://site.api.espn.com/apis/site/v2/sports/football/${path}/summary?event=${game.id}`);
+      const teams = raw?.boxscore?.teams || [];
+      let turnovers = 0, penaltyYards = 0, found = 0;
+      teams.forEach(t => {
+        const stats = t.statistics || [];
+        const tv = parseInt(stats.find(s => s.name === 'turnovers')?.displayValue, 10);
+        const pen = stats.find(s => s.name === 'totalPenaltiesYards')?.displayValue; // "7-75" = count-yards
+        if(!isNaN(tv)){ turnovers += tv; found++; }
+        const yards = pen ? parseInt(pen.split('-')[1], 10) : NaN;
+        if(!isNaN(yards)) penaltyYards += yards;
+      });
+      if(found){
+        let tvMod = 0;
+        if(turnovers >= 5) tvMod = -10;
+        else if(turnovers >= 3) tvMod = -5;
+        let penMod = 0;
+        if(penaltyYards >= 200) penMod = -9;
+        else if(penaltyYards >= 150) penMod = -6;
+        else if(penaltyYards >= 100) penMod = -3;
+        mod = Math.max(-15, tvMod + penMod);
+      }
+    }catch(e){ mod = 0; } // can't reach the summary endpoint — just skip the modifier, don't fail the row
+
+    try{ await storage.set(key, JSON.stringify({ mod }), false); }catch(e){}
+    return mod;
+  }
+
+  // Only fetches for completed games whose base score already clears 70 — everything else either
+  // isn't final yet or is already too far gone for penalties/turnovers to matter.
+  async function loadSloppinessMods(sport, games){
+    const candidates = games.filter(g =>
+      g.completed && !state.sloppinessMods.has(`${sport}:${g.id}`) && watchabilityScore(sport, g, null, null) >= 70
+    );
+    if(!candidates.length) return;
+    await mapWithConcurrency(candidates, 6, async g => {
+      const mod = await sloppinessModifier(sport, g);
+      state.sloppinessMods.set(`${sport}:${g.id}`, mod);
+    });
+  }
+
   function scoreBucketClass(score){
     if(score >= 70) return 'high';
     if(score >= 40) return 'mid';
@@ -773,7 +855,7 @@
 
   function buildRowHTML(sport, g, recAway, recHome, rowIndex, pointer, opts={}){
     const followedGame = (g.away && isFollowed(sport, g.away.id)) || (g.home && isFollowed(sport, g.home.id));
-    const score = watchabilityScore(sport, g, recAway, recHome);
+    const score = adjustedScore(sport, g, recAway, recHome);
     const marquee = isMarquee(g);
     const rivalry = isRivalryGame(sport, g);
     const nail = isNailBiter(g);
@@ -894,6 +976,7 @@
       return;
     }
 
+    await loadSloppinessMods(sport, data.games);
     const records = await getRecordsEntering(sport, pointer.year, pointer.seasontype, pointer.week);
     state.renderedGames.clear();
     let html = '';
@@ -902,7 +985,7 @@
       const scored = data.games.map(g => {
         const recAway = g.away ? records.get(g.away.id) : null;
         const recHome = g.home ? records.get(g.home.id) : null;
-        return { g, recAway, recHome, score: watchabilityScore(sport, g, recAway, recHome) };
+        return { g, recAway, recHome, score: adjustedScore(sport, g, recAway, recHome) };
       });
       scored.sort((a,b) => (b.score ?? -1) - (a.score ?? -1) || new Date(a.g.date) - new Date(b.g.date));
       scored.forEach((item, idx) => {
@@ -953,6 +1036,7 @@
     for(const [k, meta] of weekKeys){
       try{
         weekDataByKey[k] = await getWeekData(meta.sport, meta);
+        await loadSloppinessMods(meta.sport, weekDataByKey[k].games);
         recordsByKey[k] = await getRecordsEntering(meta.sport, meta.year, meta.seasontype, meta.week);
       }catch(e){ /* that week's data is unreachable right now — its pins just won't show */ }
     }
@@ -994,8 +1078,8 @@
       let items = gr.items.slice();
       if(state.sortMode === 'watchability'){
         items.sort((a,b) => {
-          const sa = watchabilityScore(gr.sport, a.game, a.recAway, a.recHome) ?? -1;
-          const sb = watchabilityScore(gr.sport, b.game, b.recAway, b.recHome) ?? -1;
+          const sa = adjustedScore(gr.sport, a.game, a.recAway, a.recHome) ?? -1;
+          const sb = adjustedScore(gr.sport, b.game, b.recAway, b.recHome) ?? -1;
           return sb - sa || new Date(a.game.date) - new Date(b.game.date);
         });
       }else{
