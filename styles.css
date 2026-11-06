@@ -227,6 +227,14 @@
     .flags{grid-column:1/-1;flex-direction:row;justify-content:flex-start;margin-top:4px;}
   }
 
+  /* The header (brand + tabs + weeknav + sort toggle + follow chips) is tall enough that keeping it
+     pinned via position:sticky eats a big share of a short viewport permanently — a 15" laptop has
+     plenty of width but limited height, so this is a height breakpoint, not a width one. Letting it
+     scroll away like normal page content gives short screens that space back. */
+  @media (max-height:1000px){
+    header{position:static;}
+  }
+
   /* ---------- landing page ---------- */
   .landing-main{
     max-width:640px;margin:60px auto 0;padding:0 20px;
